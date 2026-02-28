@@ -1,0 +1,228 @@
+---
+title: Development Guide
+description: Set up your development environment and learn the development workflow for WireGuard Easy
+---
+
+## Prerequisites
+
+Before you start developing, make sure you have the following installed:
+
+- Docker
+- Node.js LTS
+- pnpm (via corepack)
+- Visual Studio Code (recommended)
+
+<Steps>
+  <Step title="Enable Corepack">
+    Enable corepack to use pnpm:
+    
+    ```bash
+    corepack enable
+    ```
+  </Step>
+
+  <Step title="Fork the Repository">
+    Fork the [wg-easy repository](https://github.com/wg-easy/wg-easy) on GitHub.
+  </Step>
+
+  <Step title="Clone Your Fork">
+    Clone your forked repository:
+    
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/wg-easy.git
+    cd wg-easy
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install project dependencies:
+    
+    ```bash
+    pnpm install
+    ```
+  </Step>
+</Steps>
+
+## Development Server
+
+Start the development server with Docker:
+
+```bash
+pnpm dev
+```
+
+This command runs `docker compose -f docker-compose.dev.yml up wg-easy --build` and starts the full development environment.
+
+## Testing the CLI
+
+To test the CLI in development mode:
+
+```bash
+pnpm cli:dev
+```
+
+This runs the CLI with Docker: `docker compose -f docker-compose.dev.yml run --build --rm -it wg-easy cli:dev`
+
+## Working with the Source Code
+
+The main source code is located in the `src/` directory:
+
+- `src/app/` - Frontend application code
+- `src/server/` - Backend server code
+- `src/cli/` - CLI tool code
+- `src/i18n/` - Internationalization files
+
+### Update Auto Imports
+
+If you add something that should be auto-importable and VSCode complains:
+
+```bash
+cd src
+pnpm install
+cd ..
+```
+
+## Coding Style
+
+When refactoring, writing, or altering files, adhere to these rules:
+
+1. **Adjust your coding style to match the existing code** - Even if you don't prefer it, consistency is important
+2. **Use the linting tools** - Your contributions are checked by GitHub Actions
+3. **Use the provided VSCode settings** - The `.vscode/settings.json` file contains project-specific settings
+
+### Available Scripts
+
+In the `src/` directory:
+
+```bash
+# Run linter
+pnpm lint
+
+# Format code
+pnpm format
+
+# Check formatting
+pnpm format:check
+
+# Run type checking
+pnpm typecheck
+
+# Run all checks
+pnpm check:all
+
+# Build the project
+pnpm build
+
+# Run unit tests
+pnpm test:unit
+```
+
+## Database
+
+WireGuard Easy uses Drizzle ORM for database management.
+
+### Generate Migrations
+
+To generate database migrations:
+
+```bash
+cd src
+pnpm db:generate
+```
+
+## Pull Request Workflow
+
+<Note>
+You want to add a feature? Feel free to start by creating an issue explaining what you want to do and how you're thinking of doing it. Other users may have the same need and collaboration may lead to better results.
+</Note>
+
+<Steps>
+  <Step title="Create a Feature Branch">
+    Create a new branch for your changes:
+    
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+  </Step>
+
+  <Step title="Write Your Code">
+    Make your changes and ensure they follow the coding standards.
+  </Step>
+
+  <Step title="Run All Checks">
+    Before committing, run all checks:
+    
+    ```bash
+    cd src
+    pnpm check:all
+    ```
+  </Step>
+
+  <Step title="Document Your Changes">
+    Update documentation if your changes introduce new features or modify existing behavior.
+  </Step>
+
+  <Step title="Commit Your Changes">
+    [Commit](https://help.github.com/articles/closing-issues-via-commit-messages/) your changes (and [sign your commits](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key)):
+    
+    ```bash
+    git add .
+    git commit -m "feat: add your feature description"
+    ```
+  </Step>
+
+  <Step title="Push to Your Fork">
+    Push your changes to your fork:
+    
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+  </Step>
+
+  <Step title="Create a Pull Request">
+    Create a pull request to merge into `master`. **Use the pull-request template** to provide contextual information and ensure you meet the requirements of the checklist.
+  </Step>
+</Steps>
+
+## CI/CD Pipeline
+
+Pull requests are automatically tested against the CI and will be reviewed when tests pass. When your changes are validated, your branch is merged.
+
+The CI builds the new `:edge` image on every push to the `master` branch, and your changes will be included in the next version release.
+
+## Building Docker Images
+
+To build a Docker image locally:
+
+```bash
+pnpm build
+```
+
+This runs `docker build -t wg-easy .`
+
+## Version Management
+
+To update version information:
+
+```bash
+pnpm scripts:version
+```
+
+This runs the `scripts/version.sh` script.
+
+## Getting Help
+
+- Check the [documentation](https://wg-easy.github.io/wg-easy/latest)
+- Read the [README](https://github.com/wg-easy/wg-easy/blob/master/README.md)
+- Search existing [issues](https://github.com/wg-easy/wg-easy/issues)
+- Join the community discussions
+
+## Maintainer Notes
+
+Maintainers and moderators are volunteers. We greatly appreciate contributions that:
+
+- Follow the issue and PR templates
+- Include detailed information
+- Are well-tested
+- Follow the coding standards
+- Include documentation updates when needed

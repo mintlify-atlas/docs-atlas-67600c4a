@@ -1,0 +1,172 @@
+---
+title: Environment Variables
+description: Complete reference for all WireGuard Easy environment variables including core settings, web UI configuration, and debugging options
+---
+
+## Overview
+
+WireGuard Easy can be configured using environment variables. These variables control various aspects of the application, from the web UI settings to IPv6 support.
+
+## Core Environment Variables
+
+These are the essential environment variables set by default in the Docker container.
+
+<ParamField path="PORT" type="string" default="51821">
+  TCP port for the Web UI.
+  
+  This is the port where the WireGuard Easy web interface will be accessible.
+  
+  **Example:**
+  ```yaml
+  environment:
+    - PORT=6789
+  ```
+</ParamField>
+
+<ParamField path="HOST" type="string" default="0.0.0.0">
+  IP address the web UI binds to.
+  
+  By default, the web UI listens on all network interfaces. You can restrict this to `localhost` or a specific IP address.
+  
+  **Example:**
+  ```yaml
+  environment:
+    - HOST=localhost
+  ```
+</ParamField>
+
+<ParamField path="INSECURE" type="boolean" default="false">
+  Allow access over HTTP instead of HTTPS.
+  
+  <Warning>
+    Only set this to `true` if you're running WireGuard Easy behind a reverse proxy that handles HTTPS termination. Running without HTTPS exposes credentials and sensitive data.
+  </Warning>
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INSECURE=true
+  ```
+</ParamField>
+
+<ParamField path="DISABLE_IPV6" type="boolean" default="false">
+  Disable IPv6 support.
+  
+  When set to `true`, this disables:
+  - Creation of default IPv6 firewall rules
+  - IPv6 address assignment to the WireGuard interface
+  - IPv6 address assignment to clients
+  
+  <Note>
+    Even when IPv6 is disabled, you may still see an IPv6 address in the Web UI, but it won't be used by clients.
+    
+    This option may be removed in future releases as IPv6 adoption increases.
+  </Note>
+  
+  **Example:**
+  ```yaml
+  environment:
+    - DISABLE_IPV6=true
+  ```
+</ParamField>
+
+<ParamField path="INIT_ENABLED" type="boolean" default="false">
+  Enable unattended setup mode.
+  
+  When set to `true`, allows WireGuard Easy to be configured automatically on first startup using additional `INIT_*` environment variables.
+  
+  See the [Unattended Setup](/configuration/unattended-setup) documentation for more details.
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_ENABLED=true
+  ```
+</ParamField>
+
+## Debugging
+
+<ParamField path="DEBUG" type="string" default="Server,WireGuard,Database,CMD">
+  Control debug logging output.
+  
+  This variable accepts a comma-separated list of debug namespaces. The default enables logging for:
+  - `Server` - Web server operations
+  - `WireGuard` - WireGuard interface operations
+  - `Database` - Database queries and operations
+  - `CMD` - Command execution
+  
+  **Example:**
+  ```yaml
+  environment:
+    - DEBUG=Server,WireGuard
+  ```
+  
+  To disable all debug logging:
+  ```yaml
+  environment:
+    - DEBUG=
+  ```
+</ParamField>
+
+## Deprecated Variables
+
+These environment variables are deprecated and only maintained for backward compatibility with migration from older versions.
+
+<ParamField path="PASSWORD" type="string">
+  **Deprecated.** Only used during migration from older versions.
+  
+  <Warning>
+    Do not use this variable for new installations. Use the web UI setup wizard or [unattended setup](/configuration/unattended-setup) instead.
+  </Warning>
+</ParamField>
+
+<ParamField path="PASSWORD_HASH" type="string">
+  **Deprecated.** Only used during migration from older versions.
+  
+  <Warning>
+    Do not use this variable for new installations. Use the web UI setup wizard or [unattended setup](/configuration/unattended-setup) instead.
+  </Warning>
+</ParamField>
+
+## Docker Compose Example
+
+Here's a complete example showing common environment variable usage:
+
+```yaml
+volumes:
+  etc_wireguard:
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    environment:
+      - PORT=51821
+      - HOST=0.0.0.0
+      - INSECURE=false
+      - DISABLE_IPV6=false
+      - DEBUG=Server,WireGuard,Database,CMD
+    volumes:
+      - etc_wireguard:/etc/wireguard
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Unattended Setup" icon="robot" href="/configuration/unattended-setup">
+    Configure WireGuard Easy automatically without user interaction
+  </Card>
+  <Card title="Experimental Features" icon="flask" href="/configuration/experimental">
+    Enable experimental features like AmneziaWG support
+  </Card>
+</CardGroup>

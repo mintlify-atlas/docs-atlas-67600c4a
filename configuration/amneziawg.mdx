@@ -1,0 +1,192 @@
+---
+title: AmneziaWG
+description: Configure AmneziaWG protocol support for enhanced traffic obfuscation and DPI bypass capabilities
+---
+
+## Introduction
+
+**AmneziaWG** is a modified version of the WireGuard protocol with enhanced traffic obfuscation capabilities. AmneziaWG's primary goal is to counter deep packet inspection (DPI) systems and bypass VPN blocking.
+
+AmneziaWG adds multi-level transport-layer obfuscation by:
+
+- Modifying packet headers
+- Randomizing handshake message sizes
+- Disguising traffic to resemble popular UDP protocols
+
+These measures make it harder for third parties to analyze or identify your traffic, enhancing both privacy and security.
+
+## Prerequisites
+
+You must install the [AmneziaWG kernel module](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module) on the host system before enabling AmneziaWG support.
+
+<Warning>
+  Without the AmneziaWG kernel module installed, WireGuard Easy will fall back to standard WireGuard.
+</Warning>
+
+## Enabling AmneziaWG
+
+### Environment Variables
+
+<ParamField path="EXPERIMENTAL_AWG" type="boolean" default="false">
+  Enable experimental AmneziaWG support.
+  
+  <Note>
+    Starting from WireGuard Easy version 16, AmneziaWG will be enabled by default. This feature is currently experimental and may change in future releases.
+  </Note>
+  
+  **Example:**
+  ```yaml
+  environment:
+    - EXPERIMENTAL_AWG=true
+  ```
+</ParamField>
+
+<ParamField path="OVERRIDE_AUTO_AWG" type="string">
+  Override automatic WireGuard/AmneziaWG detection.
+  
+  When `EXPERIMENTAL_AWG=true`, WireGuard Easy automatically detects whether the AmneziaWG kernel module is available. This variable allows you to force a specific implementation.
+  
+  **Possible values:**
+  - `awg` - Force use of AmneziaWG
+  - `wg` - Force use of standard WireGuard
+  - Unset (default) - Automatic detection
+  
+  **Example:**
+  ```yaml
+  environment:
+    - EXPERIMENTAL_AWG=true
+    - OVERRIDE_AUTO_AWG=awg
+  ```
+  
+  <Warning>
+    Setting `OVERRIDE_AUTO_AWG=awg` without the kernel module installed will cause WireGuard Easy to fail.
+  </Warning>
+</ParamField>
+
+### Docker Compose Example
+
+```yaml
+volumes:
+  etc_wireguard:
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    environment:
+      - EXPERIMENTAL_AWG=true
+      # Optional: Force AmneziaWG if kernel module is installed
+      # - OVERRIDE_AUTO_AWG=awg
+    volumes:
+      - etc_wireguard:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+```
+
+## AmneziaWG Parameters
+
+WireGuard Easy supports configuring AmneziaWG obfuscation parameters through the web UI. These parameters control how traffic is obfuscated.
+
+<Note>
+  All parameters except I1-I5 are set at first startup. For information on manually configuring I1-I5 parameters, refer to the [AmneziaWG documentation](https://docs.amnezia.org/documentation/instructions/new-amneziawg-selfhosted/#how-to-extract-a-protocol-signature-for-amneziawg-15-manually).
+</Note>
+
+### Parameter Reference
+
+| Parameter | Description | Server Configurable | Client Configurable | Must Match |
+|-----------|-------------|---------------------|---------------------|------------|
+| **Jc** | Junk packet count | ✅ Yes | ✅ Yes | ❌ No |
+| **Jmin** | Minimum junk packet size (max: 1279 bytes) | ✅ Yes | ✅ Yes | ❌ No |
+| **Jmax** | Maximum junk packet size (max: 1280 bytes) | ✅ Yes | ✅ Yes | ❌ No |
+| **S1-S4** | Init packet magic header | ✅ Yes | ❌ No (copied from server) | ✅ Yes |
+| **H1-H4** | Response packet magic header | ✅ Yes | ❌ No (copied from server) | ✅ Yes |
+| **I1-I5** | Init packet junk size | ✅ Yes | ✅ Yes | ❌ No |
+
+<Warning>
+  Parameters **S1-S4** and **H1-H4** must match between server and client. Client configurations automatically inherit these values from the server.
+</Warning>
+
+### Compatibility with WireGuard
+
+If all AmneziaWG-specific parameters are absent from the configuration, AmneziaWG will be fully compatible with standard WireGuard. This allows you to:
+
+- Use standard WireGuard clients to connect to an AmneziaWG server
+- Gradually migrate clients to AmneziaWG
+- Maintain backward compatibility
+
+## Client Applications
+
+To connect to WireGuard Easy with AmneziaWG enabled, you need an AmneziaWG-compatible client. Where available, the official AmneziaWG app is recommended over Amnezia VPN.
+
+### Android
+
+- [AmneziaWG](https://play.google.com/store/apps/details?id=org.amnezia.awg) - AmneziaWG Official Client (Recommended)
+- [WG Tunnel](https://play.google.com/store/apps/details?id=com.zaneschepke.wireguardautotunnel) - Third Party Client
+- [Amnezia VPN](https://play.google.com/store/apps/details?id=org.amnezia.vpn) - Amnezia VPN Official Client
+
+### iOS and macOS
+
+- [AmneziaWG](https://apps.apple.com/us/app/amneziawg/id6478942365) - AmneziaWG Official Client (Recommended)
+- [Amnezia VPN](https://apps.apple.com/us/app/amneziavpn/id1600529900) - Amnezia VPN Official Client
+
+### Windows
+
+- [AmneziaWG](https://github.com/amnezia-vpn/amneziawg-windows-client/releases) - AmneziaWG Official Client (requires building from source)
+- [Amnezia VPN](https://amnezia.org/downloads) - Amnezia VPN Official Client
+
+### Linux
+
+- [Amnezia VPN](https://amnezia.org/downloads) - Amnezia VPN Official Client
+- [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools) - AmneziaWG Command Line Tools
+
+### OpenWRT
+
+- [AmneziaWG OpenWRT](https://github.com/Slava-Shchipunov/awg-openwrt) - AmneziaWG OpenWRT Packages
+- [AmneziaWG OpenWRT](https://github.com/lolo6oT/awg-openwrt) - Alternative AmneziaWG OpenWRT Packages
+
+## Troubleshooting
+
+### Verifying AmneziaWG is Active
+
+To verify that AmneziaWG is being used instead of standard WireGuard:
+
+1. Check the WireGuard Easy logs for kernel module detection messages
+2. Look for `awg` commands in the debug output (when `DEBUG` includes `CMD`)
+3. Verify client configurations contain AmneziaWG parameters
+
+### Fallback to WireGuard
+
+If the AmneziaWG kernel module is not detected, WireGuard Easy will automatically fall back to standard WireGuard. Check:
+
+- The kernel module is properly installed on the host
+- The module is loaded (`lsmod | grep amneziawg`)
+- The `/lib/modules` volume is properly mounted
+
+### Client Connection Issues
+
+If clients can't connect with AmneziaWG enabled:
+
+- Ensure you're using an AmneziaWG-compatible client
+- Verify the client configuration includes the AmneziaWG parameters
+- Try connecting without AmneziaWG parameters to test basic connectivity
+- Check firewall rules allow UDP traffic on the WireGuard port
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="AmneziaWG Documentation" icon="book" href="https://docs.amnezia.org/documentation/amnezia-wg">
+    Official AmneziaWG protocol documentation
+  </Card>
+  <Card title="Kernel Module" icon="gear" href="https://github.com/amnezia-vpn/amneziawg-linux-kernel-module">
+    AmneziaWG Linux kernel module repository
+  </Card>
+</CardGroup>

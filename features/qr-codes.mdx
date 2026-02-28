@@ -1,0 +1,320 @@
+---
+title: QR Codes
+description: Generate and use QR codes for easy mobile device configuration
+---
+
+WireGuard Easy automatically generates QR codes for each client configuration, making it simple to set up mobile devices without manual file transfers.
+
+## How QR Codes Work
+
+QR codes encode the complete WireGuard configuration as a scannable image that mobile apps can read directly.
+
+### What's Included
+
+Each QR code contains:
+
+```ini
+[Interface]
+PrivateKey: <client_private_key>
+Address: <ipv4_address>, <ipv6_address>
+DNS: <dns_servers>
+MTU: <mtu_value>
+
+[Peer]
+PublicKey: <server_public_key>
+PresharedKey: <preshared_key>
+Endpoint: <server_endpoint>
+AllowedIPs: <allowed_ips>
+PersistentKeepalive: <keepalive_value>
+```
+
+<Info>
+The QR code is a complete, self-contained configuration. No additional setup is required on the mobile device after scanning.
+</Info>
+
+## Displaying QR Codes
+
+Access client QR codes through the web interface:
+
+<Steps>
+  <Step title="Locate the Client">
+    Find the client card in the main client list view.
+  </Step>
+  
+  <Step title="Click QR Code Icon">
+    Click the QR code icon button on the right side of the client card.
+  </Step>
+  
+  <Step title="View QR Code">
+    A dialog displays the QR code on a white background for optimal scanning.
+  </Step>
+</Steps>
+
+### QR Code Dialog Features
+
+- **High Contrast Background**: White background ensures maximum readability
+- **Optimal Size**: Automatically scaled for display
+- **SVG Format**: Crisp rendering at any size
+- **Clean Display**: No distracting elements around the code
+
+## Scanning QR Codes
+
+Use the official WireGuard mobile apps to scan configuration QR codes.
+
+<Tabs>
+  <Tab title="iOS">
+    <Steps>
+      <Step title="Install WireGuard">
+        Download WireGuard from the App Store:
+        ```
+        https://apps.apple.com/app/wireguard/id1441195209
+        ```
+      </Step>
+      
+      <Step title="Open the App">
+        Launch WireGuard on your iPhone or iPad.
+      </Step>
+      
+      <Step title="Add Tunnel">
+        Tap the "+" button and select "Create from QR code".
+      </Step>
+      
+      <Step title="Scan QR Code">
+        Point your camera at the QR code displayed in WireGuard Easy.
+      </Step>
+      
+      <Step title="Name the Connection">
+        Give the tunnel a name (or keep the default from the configuration).
+      </Step>
+      
+      <Step title="Activate">
+        Toggle the switch to connect to your VPN.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Android">
+    <Steps>
+      <Step title="Install WireGuard">
+        Download WireGuard from Google Play:
+        ```
+        https://play.google.com/store/apps/details?id=com.wireguard.android
+        ```
+      </Step>
+      
+      <Step title="Open the App">
+        Launch WireGuard on your Android device.
+      </Step>
+      
+      <Step title="Add Tunnel">
+        Tap the "+" button and select "Scan from QR code".
+      </Step>
+      
+      <Step title="Grant Camera Permission">
+        Allow WireGuard to access your camera when prompted.
+      </Step>
+      
+      <Step title="Scan QR Code">
+        Point your camera at the QR code displayed in WireGuard Easy.
+      </Step>
+      
+      <Step title="Name the Tunnel">
+        Provide a tunnel name or accept the default.
+      </Step>
+      
+      <Step title="Activate">
+        Toggle the switch to connect to your VPN.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+<Tip>
+Position your device so the entire QR code is visible within the camera frame. Good lighting improves scan reliability.
+</Tip>
+
+## QR Code Generation
+
+QR codes are generated server-side as SVG images for optimal quality.
+
+### Technical Details
+
+**Format**: SVG (Scalable Vector Graphics)
+- Vector-based for perfect scaling
+- Small file size
+- Browser-native rendering
+
+**Endpoint**: `/api/client/{clientId}/qrcode.svg`
+- Requires authentication
+- Permission-checked access
+- Real-time generation
+
+**Error Correction**: High level
+- Tolerates up to 30% damage
+- Reliable scanning in various conditions
+- Robust against display artifacts
+
+## Best Practices
+
+### Display Settings
+
+1. **Screen Brightness**: Increase brightness for better scanning
+2. **Full Screen**: Use the QR dialog for distraction-free display
+3. **Stable Position**: Hold the screen steady while scanning
+4. **Clean Screen**: Wipe your screen for clearer display
+
+### Security Considerations
+
+<Warning>
+QR codes contain sensitive cryptographic keys. Treat them like passwords:
+- Don't share screenshots publicly
+- Don't display in untrusted environments
+- Regenerate if compromised
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Screen Recording Protection">
+    Be aware that QR codes can be captured through:
+    - Screenshots
+    - Screen recording software
+    - Camera photos
+    - Screen sharing sessions
+    
+    Only display QR codes in secure, private settings.
+  </Accordion>
+  
+  <Accordion title="Physical Security">
+    When scanning in public:
+    - Shield your screen from onlookers
+    - Use privacy screen protectors
+    - Scan quickly and close the dialog
+    - Be aware of security cameras
+  </Accordion>
+  
+  <Accordion title="Disposal">
+    If you need to revoke access:
+    - Delete the client configuration
+    - QR codes automatically become invalid
+    - Create new clients if credentials are compromised
+  </Accordion>
+</AccordionGroup>
+
+## Alternative Configuration Methods
+
+If QR code scanning isn't working, use these alternatives:
+
+### Configuration File Download
+
+1. Click the download icon on the client card
+2. Transfer the `.conf` file to your mobile device
+3. Import the file in the WireGuard app
+
+### One-Time Links
+
+Generate a temporary shareable link:
+
+1. Click the link icon on the client card
+2. Share the generated URL with the device
+3. Open the link on the mobile device
+4. Download and import the configuration
+
+<Note>
+One-time links expire after a set time period for security. See the [One-Time Links](/features/one-time-links) documentation for details.
+</Note>
+
+### Manual Entry
+
+1. Click "View Configuration" on the client card
+2. Copy the configuration text
+3. Create a new tunnel manually in the WireGuard app
+4. Paste the configuration
+
+This method is more error-prone but works when other methods fail.
+
+## Troubleshooting
+
+### QR Code Won't Scan
+
+<Steps>
+  <Step title="Check Lighting">
+    Ensure adequate lighting. Avoid glare and reflections on the screen.
+  </Step>
+  
+  <Step title="Adjust Distance">
+    Move the device closer or farther until the QR code fills most of the camera view.
+  </Step>
+  
+  <Step title="Clean Camera Lens">
+    Wipe the camera lens to remove smudges or dirt.
+  </Step>
+  
+  <Step title="Update App">
+    Ensure the WireGuard app is up to date.
+  </Step>
+  
+  <Step title="Try Alternative Method">
+    Use configuration file download or one-time link instead.
+  </Step>
+</Steps>
+
+### QR Code Not Displaying
+
+- **Check Permissions**: Ensure your user account has view access to the client
+- **Browser Compatibility**: Use a modern browser with SVG support
+- **Network Issues**: Verify connection to the WireGuard Easy server
+- **Server Status**: Confirm the WireGuard service is running
+
+### Configuration Import Fails
+
+- **Invalid Configuration**: Regenerate the QR code and try again
+- **App Permissions**: Grant necessary permissions to the WireGuard app
+- **Duplicate Name**: Tunnel name might conflict with existing configuration
+- **Version Compatibility**: Ensure WireGuard app and server versions are compatible
+
+<Tip>
+If scanning consistently fails, screenshot the QR code and use a QR reader app to decode it. Check if the configuration text is valid WireGuard format.
+</Tip>
+
+## Advanced Usage
+
+### Batch Setup
+
+For setting up multiple devices:
+
+1. Open QR codes in separate browser tabs
+2. Scan each QR code sequentially
+3. Name each tunnel distinctly (e.g., "Home VPN - iPhone", "Home VPN - iPad")
+
+### AmneziaWG Support
+
+If using AmneziaWG obfuscation:
+
+<Warning>
+Standard WireGuard apps cannot scan QR codes with AmneziaWG parameters. Use the AmneziaWG mobile app instead:
+- iOS: AmneziaWG from App Store
+- Android: AmneziaWG from Google Play
+</Warning>
+
+### Custom QR Code Size
+
+The QR code size is optimized for standard displays. For presentations or special use cases, you can:
+
+1. Screenshot the QR dialog
+2. Use image editing software to resize
+3. Ensure error correction handles any quality loss
+
+## API Access
+
+For automated workflows, access QR codes programmatically:
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  https://your-server.com/api/client/123/qrcode.svg \
+  -o client-123-qr.svg
+```
+
+This enables:
+- Automated device provisioning
+- Bulk configuration deployment
+- Integration with MDM systems
+- Custom onboarding workflows

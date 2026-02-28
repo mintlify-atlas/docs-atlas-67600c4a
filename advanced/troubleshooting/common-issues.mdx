@@ -1,0 +1,425 @@
+---
+title: Common Issues
+description: Solutions to frequently encountered problems when using WireGuard Easy
+---
+
+This page covers the most common issues you may encounter when running WireGuard Easy and provides step-by-step solutions to resolve them.
+
+## Container Issues
+
+### Container State Problems
+
+<Warning>
+  Always use `docker compose up` and `docker compose down` instead of `start` and `stop`. Using `start`/`stop` can leave the container in an inconsistent state and cause startup problems.
+</Warning>
+
+**Symptoms:**
+- Container fails to start properly
+- Configuration changes not taking effect
+- Unexpected behavior after restart
+
+**Solution:**
+
+```bash
+# Stop the container properly
+cd /etc/docker/containers/wg-easy
+sudo docker compose down
+
+# Start the container
+sudo docker compose up -d
+```
+
+### Container Won't Start
+
+**Common causes:**
+1. Port conflicts (51820 or 51821 already in use)
+2. Missing environment variables
+3. Volume permission issues
+
+**Diagnostic steps:**
+
+```bash
+# Check container logs
+sudo docker compose logs
+
+# Check if ports are in use
+sudo netstat -tulpn | grep -E '51820|51821'
+
+# Verify container status
+sudo docker compose ps
+```
+
+**Solution for port conflicts:**
+
+```bash
+# Find process using the port
+sudo lsof -i :51821
+
+# Kill the process or change WireGuard Easy port
+# Edit docker-compose.yml to use different PORT environment variable
+```
+
+## WireGuard Interface Errors
+
+### Error: Cannot find device "wg0"
+
+**Error message:**
+```
+WireGuard exited with the error: Cannot find device "wg0"
+```
+
+**Cause:** The WireGuard kernel module is not loaded or the interface was not created properly.
+
+**Solution:**
+
+```bash
+# Load the WireGuard kernel module
+sudo modprobe wireguard
+
+# Verify the module is loaded
+lsmod | grep wireguard
+
+# Make it persistent across reboots
+echo "wireguard" | sudo tee -a /etc/modules
+```
+
+<Note>
+  After loading the module, restart the WireGuard Easy container using `docker compose down` and `docker compose up -d`.
+</Note>
+
+### WireGuard Interface Not Created
+
+**Symptoms:**
+- No `wg0` interface visible in `ip addr`
+- Clients cannot connect
+
+**Diagnostic steps:**
+
+```bash
+# Check if interface exists
+ip addr show wg0
+
+# Check WireGuard status
+sudo wg show
+
+# Check container capabilities
+sudo docker inspect wg-easy | grep -i cap
+```
+
+**Solution:**
+
+Ensure your container has the necessary capabilities:
+
+```yaml
+cap_add:
+  - NET_ADMIN
+  - SYS_MODULE
+```
+
+## iptables Errors
+
+### iptables NAT Table Does Not Exist
+
+**Error message:**
+```
+can't initialize iptables table `nat': Table does not exist (do you need to insmod?)
+```
+
+**Solution:**
+
+```bash
+# Load the NAT kernel module
+sudo modprobe iptable_nat
+
+# Make it persistent
+echo "iptable_nat" | sudo tee -a /etc/modules
+
+# Restart the container
+cd /etc/docker/containers/wg-easy
+sudo docker compose down
+sudo docker compose up -d
+```
+
+### ip6tables NAT Table Does Not Exist
+
+**Error message:**
+```
+can't initialize ip6tables table `nat': Table does not exist (do you need to insmod?)
+```
+
+**Solution:**
+
+```bash
+# Load the IPv6 NAT kernel module
+sudo modprobe ip6table_nat
+
+# Make it persistent
+echo "ip6table_nat" | sudo tee -a /etc/modules
+```
+
+<Note>
+  If you don't need IPv6 support, you can disable it by setting `DISABLE_IPV6=true` in your environment variables.
+</Note>
+
+### iptables Filter Table Permission Denied
+
+**Error message:**
+```
+can't initialize iptables table `filter': Permission denied
+```
+
+**Solution:**
+
+```bash
+# Load the filter kernel module
+sudo modprobe iptable_filter
+
+# Make it persistent
+echo "iptable_filter" | sudo tee -a /etc/modules
+
+# Ensure container runs with proper privileges
+# Add to docker-compose.yml if not present:
+# cap_add:
+#   - NET_ADMIN
+```
+
+### ip6tables Filter Table Permission Denied
+
+**Error message:**
+```
+can't initialize ip6tables table `filter': Permission denied
+```
+
+**Solution:**
+
+```bash
+# Load the IPv6 filter kernel module
+sudo modprobe ip6table_filter
+
+# Make it persistent
+echo "ip6table_filter" | sudo tee -a /etc/modules
+```
+
+## Web UI Issues
+
+### Cannot Access Web UI
+
+**Symptoms:**
+- Browser shows "Connection refused" or "Unable to connect"
+- Web UI times out
+
+**Diagnostic steps:**
+
+```bash
+# Check if container is running
+sudo docker compose ps
+
+# Check if port is listening
+sudo netstat -tulpn | grep 51821
+
+# Check container logs for errors
+sudo docker compose logs wg-easy
+
+# Test local connectivity
+curl http://localhost:51821
+```
+
+**Common solutions:**
+
+1. **Firewall blocking access:**
+   ```bash
+   # Allow port through firewall (UFW example)
+   sudo ufw allow 51821/tcp
+   ```
+
+2. **Wrong HOST binding:**
+   - Check `HOST` environment variable in docker-compose.yml
+   - Should be `0.0.0.0` for external access
+
+3. **Reverse proxy misconfiguration:**
+   - Verify reverse proxy is forwarding to correct port
+   - Check reverse proxy logs
+
+### Web UI Shows Wrong Password
+
+**Symptoms:**
+- Correct password doesn't work
+- Locked out of Web UI
+
+**Solution:**
+
+```bash
+# Check current password hash in environment
+sudo docker compose config | grep PASSWORD
+
+# Generate new password hash
+sudo docker run --rm -it ghcr.io/wg-easy/wg-easy wgpw 'your-new-password'
+
+# Update docker-compose.yml with new hash
+# Restart container
+sudo docker compose down
+sudo docker compose up -d
+```
+
+## Client Configuration Issues
+
+### Client Config Download Fails
+
+**Symptoms:**
+- Download button doesn't work
+- Empty or corrupted config file
+
+**Solution:**
+
+1. Check browser console for errors
+2. Verify client was created successfully in the Web UI
+3. Try regenerating the client configuration
+
+### QR Code Not Displaying
+
+**Cause:** Usually a browser rendering issue or missing client data.
+
+**Solution:**
+
+```bash
+# Regenerate client from Web UI
+# Or use CLI to create new client:
+sudo docker compose exec wg-easy wg-easy client add "client-name"
+```
+
+## Update and Migration Issues
+
+### Failed Update
+
+**Symptoms:**
+- Container won't start after update
+- Configuration errors after update
+
+**Solution:**
+
+```bash
+# Check logs for migration errors
+sudo docker compose logs
+
+# Rollback to previous version if needed
+# Edit docker-compose.yml and specify previous version tag
+# Example: ghcr.io/wg-easy/wg-easy:14
+
+sudo docker compose down
+sudo docker compose up -d
+```
+
+<Warning>
+  When upgrading between major versions (e.g., v14 to v15), always consult the migration guide first to understand breaking changes.
+</Warning>
+
+### Configuration Not Persisting
+
+**Symptoms:**
+- Clients disappear after restart
+- Settings reset after container restart
+
+**Diagnostic steps:**
+
+```bash
+# Check volume configuration
+sudo docker compose config | grep -A 5 volumes
+
+# Verify volume exists
+sudo docker volume ls | grep wireguard
+
+# Check volume mount inside container
+sudo docker compose exec wg-easy ls -la /etc/wireguard
+```
+
+**Solution:**
+
+Ensure proper volume mapping in docker-compose.yml:
+
+```yaml
+volumes:
+  - etc_wireguard:/etc/wireguard
+```
+
+## Performance Issues
+
+### Slow Connection Speeds
+
+**Possible causes:**
+1. MTU size mismatch
+2. CPU limitations on host
+3. Network bottlenecks
+
+**Diagnostic steps:**
+
+```bash
+# Check WireGuard statistics
+sudo docker compose exec wg-easy wg show
+
+# Monitor CPU usage
+docker stats wg-easy
+
+# Test MTU size
+ping -M do -s 1472 <vpn-client-ip>
+```
+
+**Solution:**
+
+Adjust MTU in client configuration if needed (typically 1420 for WireGuard).
+
+### High CPU Usage
+
+**Cause:** Usually related to encryption overhead or many concurrent connections.
+
+**Solution:**
+
+```bash
+# Monitor resource usage
+docker stats wg-easy
+
+# Consider hardware acceleration if available
+# Check if AES-NI is enabled on CPU
+grep aes /proc/cpuinfo
+```
+
+## Docker-Specific Issues
+
+### Permission Denied Errors
+
+**Solution:**
+
+```bash
+# Run docker commands with sudo
+sudo docker compose up -d
+
+# Or add user to docker group (logout/login required)
+sudo usermod -aG docker $USER
+```
+
+### Out of Disk Space
+
+**Diagnostic steps:**
+
+```bash
+# Check disk usage
+df -h
+
+# Check Docker disk usage
+sudo docker system df
+
+# Clean up unused Docker resources
+sudo docker system prune -a
+```
+
+## Getting More Help
+
+<Note>
+  If you've tried these solutions and still experience issues, check the [FAQ](/advanced/troubleshooting/faq) or open a discussion on [GitHub](https://github.com/wg-easy/wg-easy/discussions).
+</Note>
+
+When asking for help, always include:
+- WireGuard Easy version
+- Docker/Podman version
+- Host OS and kernel version
+- Relevant logs from `docker compose logs`
+- Your docker-compose.yml (with sensitive data removed)

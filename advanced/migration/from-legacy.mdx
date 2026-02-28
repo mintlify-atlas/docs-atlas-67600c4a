@@ -1,0 +1,551 @@
+---
+title: Migrate from Legacy Versions
+description: Migration guide for upgrading from pre-v14 versions of WireGuard Easy to the latest version, including special considerations for very old installations.
+---
+
+This guide helps you migrate from legacy versions of WireGuard Easy (versions older than v14) to the latest version. If you're running a version before v14, this guide is for you.
+
+<Warning>
+  Legacy versions (pre-v14) are no longer supported. It's strongly recommended to upgrade to the latest version for security updates, bug fixes, and new features.
+</Warning>
+
+## What Are Legacy Versions?
+
+Legacy versions include:
+
+- Any version numbered below v14 (v1-v13)
+- Versions from before September 2024
+- Installations that don't use semantic versioning
+- Forks or custom builds based on old code
+
+## Why Upgrade?
+
+Upgrading from legacy versions provides:
+
+- **Security**: Critical security patches and improvements
+- **Stability**: Numerous bug fixes and performance improvements
+- **Features**: New UI, 2FA, IPv6 support, CIDR support, SQLite database, API authentication
+- **Maintenance**: Active development and community support
+- **Compatibility**: Better Docker and container platform support
+
+## Pre-Migration Assessment
+
+<Steps>
+  <Step title="Identify Your Current Version">
+    Determine which version you're running:
+    
+    ```bash
+    # Check container image tag
+    docker inspect wg-easy | grep Image
+    
+    # Check container logs for version info
+    docker logs wg-easy | head -20
+    
+    # Check environment variables for old configuration style
+    docker inspect wg-easy | grep -A 30 Env
+    ```
+    
+    Look for indicators like:
+    - `PASSWORD` environment variable (pre-v14)
+    - Absence of `PASSWORD_HASH` (pre-v14)
+    - Old UI screenshots that don't match current documentation
+  </Step>
+  
+  <Step title="Check Architecture">
+    Verify your system architecture is supported in modern versions:
+    
+    ```bash
+    docker version --format '{{.Server.Arch}}'
+    ```
+    
+    <Warning>
+      **ARMv6 and ARMv7**: These architectures are no longer supported. ARMv6 support ended in v15.0.0, and ARMv7 support ended in v15.2.0. You'll need to migrate to compatible hardware.
+    </Warning>
+  </Step>
+  
+  <Step title="Document Your Setup">
+    Before proceeding, document:
+    
+    1. All environment variables in use
+    2. Port mappings (WireGuard port, Web UI port)
+    3. Volume mounts and their locations
+    4. Network settings and custom configurations
+    5. Number of clients and their configurations
+    6. Any custom scripts or integrations
+    
+    Save this information - you'll need it during migration.
+  </Step>
+  
+  <Step title="Test Backup Access">
+    Ensure you can access your configuration data:
+    
+    ```bash
+    # List configuration files
+    docker exec wg-easy ls -la /etc/wireguard/
+    
+    # Verify you can copy files
+    docker cp wg-easy:/etc/wireguard/wg0.conf ~/test-backup.conf
+    ```
+    
+    If these commands fail, you may have permission issues to resolve first.
+  </Step>
+</Steps>
+
+## Migration Paths
+
+### Path 1: Direct Migration to Latest Version (Recommended)
+
+This is the recommended approach for most users:
+
+<Steps>
+  <Step title="Create Complete Backup">
+    Back up all your WireGuard configuration:
+    
+    ```bash
+    # Create backup directory
+    mkdir -p ~/wg-easy-backup-$(date +%Y%m%d)
+    
+    # Copy all configuration files
+    docker cp wg-easy:/etc/wireguard/ ~/wg-easy-backup-$(date +%Y%m%d)/
+    
+    # Export environment variables
+    docker inspect wg-easy > ~/wg-easy-backup-$(date +%Y%m%d)/container-config.json
+    
+    # Save docker compose file if you have one
+    cp docker-compose.yml ~/wg-easy-backup-$(date +%Y%m%d)/
+    ```
+    
+    <Warning>
+      Store this backup securely! It contains private keys and sensitive configuration data.
+    </Warning>
+  </Step>
+  
+  <Step title="Export Client Configurations">
+    If your version doesn't have a `wg0.json` export feature:
+    
+    1. Access the Web UI
+    2. Manually download each client's configuration file
+    3. Save QR codes if needed
+    4. Document client names, allowed IPs, and settings
+    
+    Alternatively, if you have SSH access:
+    
+    ```bash
+    # Export all client configs
+    docker exec wg-easy wg show wg0 dump > ~/wg-easy-backup-$(date +%Y%m%d)/clients.dump
+    ```
+  </Step>
+  
+  <Step title="Note Current Settings">
+    Document all settings from your environment variables:
+    
+    Common legacy environment variables:
+    - `PASSWORD` (replaced by `PASSWORD_HASH` in v14, now in Web UI)
+    - `WG_HOST` (now configured in Web UI)
+    - `WG_PORT` (now configured in Web UI)
+    - `WG_DEFAULT_ADDRESS` (now in Web UI)
+    - `WG_DEFAULT_DNS` (now in Web UI)
+    - `WG_MTU` (now in Web UI)
+    - `WG_PERSISTENT_KEEPALIVE` (now in Web UI)
+    - `WG_ALLOWED_IPS` (now in Web UI)
+    - `WG_POST_UP` (now in Web UI)
+    - `WG_POST_DOWN` (now in Web UI)
+    - `WG_PRE_UP` (now in Web UI)
+    - `WG_PRE_DOWN` (now in Web UI)
+  </Step>
+  
+  <Step title="Prepare New Configuration">
+    Since v15 uses a different configuration format, you'll need to either:
+    
+    **Option A: Use unattended setup** (if you have the configuration details):
+    
+    ```yaml
+    environment:
+      - INIT_ENABLED=true
+      - INIT_USERNAME=admin
+      - INIT_PASSWORD=YourSecurePassword
+      - INIT_HOST=vpn.example.com  # Your old WG_HOST
+      - INIT_PORT=51820  # Your old WG_PORT
+      - INIT_DNS=1.1.1.1,8.8.8.8  # Your old WG_DEFAULT_DNS
+      - INIT_IPV4_CIDR=10.8.0.0/24  # Your old WG_DEFAULT_ADDRESS
+      - INIT_IPV6_CIDR=fd00::/64
+    ```
+    
+    **Option B: Manual configuration** through the setup wizard after starting the container.
+  </Step>
+  
+  <Step title="Stop Legacy Container">
+    ```bash
+    docker stop wg-easy
+    docker rename wg-easy wg-easy-legacy-backup
+    ```
+    
+    <Note>
+      We're renaming instead of removing so you can easily rollback if needed.
+    </Note>
+  </Step>
+  
+  <Step title="Deploy Latest Version">
+    Create a new `docker-compose.yml` for the latest version:
+    
+    ```yaml
+    services:
+      wg-easy:
+        image: ghcr.io/wg-easy/wg-easy:latest
+        container_name: wg-easy
+        environment:
+          # Required for HTTP access
+          - INSECURE=true  # Remove if using HTTPS/reverse proxy
+          # Optional: Unattended setup (remove after first start)
+          - INIT_ENABLED=true
+          - INIT_USERNAME=admin
+          - INIT_PASSWORD=YourNewSecurePassword
+          - INIT_HOST=vpn.example.com
+          - INIT_PORT=51820
+          - INIT_DNS=1.1.1.1
+          - INIT_IPV4_CIDR=10.8.0.0/24
+          - INIT_IPV6_CIDR=fd00::/64
+        volumes:
+          - ./wg-easy-new:/etc/wireguard
+          - /lib/modules:/lib/modules
+        ports:
+          - "51820:51820/udp"
+          - "51821:51821/tcp"
+        cap_add:
+          - NET_ADMIN
+          - SYS_MODULE
+        sysctls:
+          - net.ipv4.conf.all.src_valid_mark=1
+          - net.ipv4.ip_forward=1
+        restart: unless-stopped
+    ```
+    
+    Start the container:
+    
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+  
+  <Step title="Configure New Installation">
+    1. Access the Web UI at `http://your-server:51821`
+    2. Complete the setup wizard
+    3. If you used unattended setup, the basic configuration is done
+    4. If not, enter your configuration details manually
+  </Step>
+  
+  <Step title="Recreate Clients">
+    Since legacy versions may not have a compatible export format:
+    
+    1. In the new Web UI, create each client manually
+    2. Use the same names and settings as your old clients
+    3. For each client:
+       - Click "Add Client"
+       - Enter the client name
+       - Configure Allowed IPs if needed
+       - Save the configuration
+    4. Distribute new configuration files or QR codes to clients
+    
+    <Note>
+      Clients will need to update their WireGuard configurations with the new keys. The private keys cannot be migrated for security reasons.
+    </Note>
+  </Step>
+  
+  <Step title="Test Connectivity">
+    1. Connect from at least one client
+    2. Verify internet access works
+    3. Check the Web UI shows the client as connected
+    4. Test DNS resolution
+    5. Verify all routes work as expected
+  </Step>
+  
+  <Step title="Migrate Remaining Clients">
+    Once you've confirmed everything works:
+    
+    1. Update all other clients with their new configurations
+    2. Test each client after updating
+    3. Remove old configurations from client devices
+  </Step>
+  
+  <Step title="Cleanup">
+    After confirming everything works for at least 24-48 hours:
+    
+    ```bash
+    # Remove old container (if you're confident)
+    docker rm wg-easy-legacy-backup
+    
+    # Keep backups for at least 30 days
+    # Do NOT delete ~/wg-easy-backup-* yet
+    ```
+  </Step>
+</Steps>
+
+### Path 2: Staged Migration (For Complex Setups)
+
+If you have a complex setup with many clients or custom configurations:
+
+<Steps>
+  <Step title="Set Up Parallel Installation">
+    Run the new version on a different port/server:
+    
+    ```yaml
+    services:
+      wg-easy-new:
+        image: ghcr.io/wg-easy/wg-easy:latest
+        container_name: wg-easy-new
+        environment:
+          - INSECURE=true
+          - INIT_ENABLED=true
+          - INIT_USERNAME=admin
+          - INIT_PASSWORD=SecurePassword
+          - INIT_HOST=vpn.example.com
+          - INIT_PORT=51822  # Different port
+        volumes:
+          - ./wg-easy-new:/etc/wireguard
+          - /lib/modules:/lib/modules
+        ports:
+          - "51822:51822/udp"  # Different ports
+          - "51823:51821/tcp"
+        cap_add:
+          - NET_ADMIN
+          - SYS_MODULE
+        sysctls:
+          - net.ipv4.conf.all.src_valid_mark=1
+          - net.ipv4.ip_forward=1
+        restart: unless-stopped
+    ```
+  </Step>
+  
+  <Step title="Configure and Test New Instance">
+    1. Set up the new instance completely
+    2. Add a few test clients
+    3. Verify functionality
+    4. Test for several days alongside the old instance
+  </Step>
+  
+  <Step title="Gradual Client Migration">
+    1. Migrate clients in batches
+    2. Start with non-critical clients
+    3. Monitor for issues
+    4. Gradually move all clients to the new instance
+  </Step>
+  
+  <Step title="Switch Over">
+    Once all clients are migrated:
+    
+    1. Stop the old container
+    2. Update the new container to use the original ports
+    3. Remove the old container
+  </Step>
+</Steps>
+
+## Special Considerations
+
+### Very Old Versions (v1-v10)
+
+If you're running a very old version:
+
+<Warning>
+  Versions older than v10 may have significant security vulnerabilities. Upgrade immediately.
+</Warning>
+
+- The configuration format may be completely different
+- You may need to manually reconstruct client configurations
+- Consider this a fresh installation rather than a migration
+- Export client public keys if possible for reference
+
+### Custom Modifications
+
+If you've modified WireGuard Easy:
+
+- Custom code changes won't carry over
+- Custom UI modifications will be lost
+- Document all customizations
+- Consider contributing features upstream
+- You may need to maintain a fork
+
+### Large Deployments (50+ Clients)
+
+For large deployments:
+
+1. Plan the migration during a maintenance window
+2. Consider scripting client recreation
+3. Use the API to automate client creation
+4. Test thoroughly with a subset of clients first
+5. Have a rollback plan ready
+
+### Integrations and Automation
+
+If you have automated systems:
+
+- API endpoints have changed in v15
+- API now requires authentication
+- Update scripts to use new API structure
+- Test integrations against the new version
+- Update monitoring and alerting systems
+
+## Common Legacy Issues
+
+### PASSWORD vs PASSWORD_HASH
+
+v14 changed from `PASSWORD` to `PASSWORD_HASH`:
+
+```bash
+# Old (pre-v14)
+- PASSWORD=mypassword
+
+# v14
+- PASSWORD_HASH=$(docker run ghcr.io/wg-easy/wg-easy wgpw YOUR_PASSWORD)
+
+# v15 (configured in Web UI during setup)
+# No environment variable needed
+```
+
+### Missing wg0.json Export
+
+Older versions don't have JSON export:
+
+1. You'll need to manually document client configurations
+2. Extract data from `wg0.conf` if available
+3. Use `wg show` command to get current configuration
+4. Recreate clients in the new version
+
+### Port Conflicts
+
+If you used non-standard ports:
+
+```yaml
+# Map your custom ports
+ports:
+  - "YOUR_WG_PORT:51820/udp"  # Your WireGuard port
+  - "YOUR_UI_PORT:51821/tcp"  # Your Web UI port
+```
+
+## Rollback Procedure
+
+If migration fails:
+
+<Steps>
+  <Step title="Stop New Container">
+    ```bash
+    docker stop wg-easy
+    docker rm wg-easy
+    ```
+  </Step>
+  
+  <Step title="Restore Legacy Container">
+    ```bash
+    docker rename wg-easy-legacy-backup wg-easy
+    docker start wg-easy
+    ```
+  </Step>
+  
+  <Step title="Verify Legacy Service">
+    ```bash
+    docker logs wg-easy
+    docker exec wg-easy wg show
+    ```
+  </Step>
+  
+  <Step title="Test Client Connectivity">
+    Ensure existing clients can still connect.
+  </Step>
+</Steps>
+
+## Post-Migration Best Practices
+
+1. **Security**:
+   - Enable 2FA in the Admin Panel
+   - Use strong passwords
+   - Set up HTTPS/reverse proxy
+   - Regularly update to latest versions
+
+2. **Backups**:
+   - Implement automated backups
+   - Store backups securely off-site
+   - Test backup restoration regularly
+   - Use the built-in backup feature in Web UI
+
+3. **Monitoring**:
+   - Enable Prometheus metrics if needed
+   - Monitor container logs
+   - Set up alerts for service failures
+   - Track client connections
+
+4. **Maintenance**:
+   - Subscribe to release notifications
+   - Review changelogs before updating
+   - Test updates in staging first
+   - Keep Docker and system updated
+
+## Troubleshooting
+
+### Cannot Export Legacy Configuration
+
+```bash
+# Try extracting directly from WireGuard
+docker exec wg-easy wg show wg0 > current-config.txt
+
+# Parse the configuration
+docker exec wg-easy cat /etc/wireguard/wg0.conf > wg0.conf.backup
+```
+
+### Clients Lost Connection During Migration
+
+1. Check if old container is fully stopped
+2. Verify new container is running on correct ports
+3. Ensure firewall rules are correct
+4. Check that WireGuard interface is up
+5. Verify clients have updated configurations
+
+### Performance Issues After Migration
+
+If the new version performs worse:
+
+1. Check Docker resource limits
+2. Verify MTU settings are correct
+3. Review system logs for errors
+4. Ensure kernel modules are loaded
+5. Check for conflicting network rules
+
+### Database Migration Errors
+
+v15 uses SQLite. If you see database errors:
+
+```bash
+# Check database file
+docker exec wg-easy ls -la /etc/wireguard/
+
+# Restart container
+docker restart wg-easy
+
+# Check logs
+docker logs wg-easy --tail 100
+```
+
+## Additional Resources
+
+- [Migrate from v14](/advanced/migration/from-v14) - If you first upgrade to v14
+- [Getting Started Guide](/getting-started)
+- [Docker Compose Installation](/deployment/docker-compose)
+- [API Documentation](/advanced/api)
+- [Troubleshooting Guide](/advanced/troubleshooting/common-issues)
+
+## Getting Help
+
+If you need assistance:
+
+1. Check [GitHub Issues](https://github.com/wg-easy/wg-easy/issues)
+2. Search for similar migration problems
+3. Review the [Changelog](https://github.com/wg-easy/wg-easy/blob/master/CHANGELOG.md)
+4. Join community discussions
+5. Provide detailed information when asking for help:
+   - Legacy version number
+   - Target version
+   - Docker/system environment
+   - Error messages
+   - Steps already attempted
+
+<Note>
+  Remember: Keep your backups safe and don't delete them until you're confident the migration is successful!
+</Note>

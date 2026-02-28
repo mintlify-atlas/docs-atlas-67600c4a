@@ -1,0 +1,637 @@
+---
+title: Frequently Asked Questions
+description: Answers to common questions about WireGuard Easy setup, configuration, and usage
+---
+
+This page answers frequently asked questions about WireGuard Easy. If your question isn't answered here, check the [GitHub Discussions](https://github.com/wg-easy/wg-easy/discussions).
+
+## Installation & Setup
+
+<Accordion title="What are the system requirements for WireGuard Easy?">
+  **Minimum requirements:**
+  
+  - A host system you can manage (physical server, VPS, or cloud instance)
+  - Supported architecture: x86_64 or arm64
+  - Docker or Podman container runtime
+  - Public IP address or domain name
+  - Linux kernel with WireGuard support (kernel 5.6+ or backported module)
+  
+  **Recommended:**
+  
+  - 1 CPU core
+  - 512 MB RAM (1 GB recommended)
+  - 1 GB disk space
+  - Ubuntu 20.04+ or Debian 11+
+</Accordion>
+
+<Accordion title="Can I run WireGuard Easy on Windows or macOS?">
+  WireGuard Easy is designed to run on Linux servers using Docker. While Docker Desktop supports Windows and macOS, WireGuard Easy requires Linux-specific kernel modules and networking features.
+  
+  **Options:**
+  
+  - Run on a Linux VPS (recommended)
+  - Use a Linux VM on Windows/macOS
+  - Use Windows Subsystem for Linux 2 (WSL2) with Docker Desktop (experimental)
+  
+  For production use, always use a Linux host.
+</Accordion>
+
+<Accordion title="Do I need a domain name or can I use an IP address?">
+  You can use either:
+  
+  **Public IP Address:**
+  ```yaml
+  environment:
+    - WG_HOST=203.0.113.42
+  ```
+  
+  **Domain Name (recommended):**
+  ```yaml
+  environment:
+    - WG_HOST=vpn.yourdomain.com
+  ```
+  
+  **Benefits of using a domain:**
+  - Survives IP address changes (with DDNS)
+  - More memorable for users
+  - Better for SSL certificates
+  
+  If your IP changes frequently, use a Dynamic DNS service.
+</Accordion>
+
+<Accordion title="Which Docker image tag should I use?">
+  **Recommended: Use major version tags**
+  
+  ```yaml
+  image: ghcr.io/wg-easy/wg-easy:15
+  ```
+  
+  **Available tags:**
+  
+  - `15` - Latest v15.x (recommended, auto-updates minor/patch)
+  - `15.0` - Latest v15.0.x (auto-updates patches only)
+  - `15.0.0` - Specific version (no auto-updates)
+  - `edge` - Latest master branch (unstable, for testing)
+  - `latest` - Points to v14 (avoid, deprecated)
+  
+  Avoid using `latest` as it points to the older v14 release.
+</Accordion>
+
+## Configuration
+
+<Accordion title="How do I change the default password?">
+  Generate a password hash and update your `docker-compose.yml`:
+  
+  ```bash
+  # Generate password hash
+  sudo docker run --rm -it ghcr.io/wg-easy/wg-easy wgpw 'your-secure-password'
+  ```
+  
+  Copy the output and update your configuration:
+  
+  ```yaml
+  environment:
+    - PASSWORD_HASH=<hash-from-above>
+  ```
+  
+  Then restart:
+  ```bash
+  sudo docker compose down
+  sudo docker compose up -d
+  ```
+</Accordion>
+
+<Accordion title="Can I change the default ports?">
+  Yes, you can customize both the WireGuard VPN port and the Web UI port:
+  
+  ```yaml
+  environment:
+    - PORT=8080           # Web UI port (default: 51821)
+    - WG_PORT=12345       # WireGuard port (default: 51820)
+  
+  ports:
+    - "8080:8080"         # Must match PORT
+    - "12345:12345/udp"   # Must match WG_PORT
+  ```
+  
+  **Important:** Update your firewall rules to match the new ports.
+</Accordion>
+
+<Accordion title="How do I enable or disable IPv6?">
+  **Disable IPv6:**
+  
+  ```yaml
+  environment:
+    - DISABLE_IPV6=true
+  ```
+  
+  **Enable IPv6 (default):**
+  
+  ```yaml
+  environment:
+    - DISABLE_IPV6=false
+  ```
+  
+  Or simply omit the variable (IPv6 is enabled by default).
+  
+  <Note>
+    When disabled, IPv6 addresses may still appear in the Web UI but won't be used.
+  </Note>
+</Accordion>
+
+<Accordion title="Can I run WireGuard Easy without a reverse proxy?">
+  Yes, but you need to configure SSL/TLS or allow insecure HTTP:
+  
+  **Option 1: Use insecure HTTP (testing only)**
+  ```yaml
+  environment:
+    - INSECURE=true
+  ```
+  
+  **Option 2: No reverse proxy with SSL**
+  Follow the [reverse-proxyless guide](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/reverse-proxyless/)
+  
+  <Warning>
+    For production, always use HTTPS, either through a reverse proxy or direct SSL configuration.
+  </Warning>
+</Accordion>
+
+<Accordion title="How do I configure 2FA?">
+  See the dedicated [2FA guide](/guides/2fa) for complete setup instructions.
+  
+  **Quick overview:**
+  
+  1. Enable 2FA in environment variables
+  2. Generate TOTP secret
+  3. Configure in Web UI
+  4. Scan QR code with authenticator app
+</Accordion>
+
+## Usage & Management
+
+<Accordion title="How many clients can I add?">
+  **Theoretical limit:** 253 clients per WireGuard interface (IPv4 subnet limitation)
+  
+  **Practical considerations:**
+  
+  - Server CPU and bandwidth
+  - Concurrent connections needed
+  - Network throughput requirements
+  
+  For most home/small business use cases, 10-50 clients work well on a modest VPS.
+</Accordion>
+
+<Accordion title="Can I access my home network through the VPN?">
+  Yes, but this requires additional configuration:
+  
+  1. **Enable routing to home network:**
+     ```yaml
+     environment:
+       - WG_ALLOWED_IPS=10.8.0.0/24,192.168.1.0/24
+     ```
+     (Replace 192.168.1.0/24 with your home network)
+  
+  2. **Configure routing on your router/firewall**
+  3. **Update client AllowedIPs** to include home network
+  
+  See [routed setup tutorial](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/routed/) for details.
+</Accordion>
+
+<Accordion title="How do I backup my configuration?">
+  **Backup the WireGuard configuration volume:**
+  
+  ```bash
+  # Find the volume name
+  sudo docker volume ls | grep wireguard
+  
+  # Create backup
+  sudo docker run --rm \
+    -v etc_wireguard:/data \
+    -v $(pwd):/backup \
+    alpine tar czf /backup/wg-easy-backup.tar.gz -C /data .
+  ```
+  
+  **Restore from backup:**
+  
+  ```bash
+  # Restore backup
+  sudo docker run --rm \
+    -v etc_wireguard:/data \
+    -v $(pwd):/backup \
+    alpine tar xzf /backup/wg-easy-backup.tar.gz -C /data
+  ```
+  
+  Store backups securely - they contain private keys!
+</Accordion>
+
+<Accordion title="How do I update WireGuard Easy?">
+  **Standard update process:**
+  
+  ```bash
+  cd /etc/docker/containers/wg-easy
+  
+  # Pull latest image
+  sudo docker compose pull
+  
+  # Restart with new image
+  sudo docker compose down
+  sudo docker compose up -d
+  
+  # Check logs
+  sudo docker compose logs -f
+  ```
+  
+  **Auto-updates:** See [auto-updates tutorial](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/auto-updates/)
+  
+  <Warning>
+    When updating between major versions (e.g., v14 to v15), check the [migration guide](/advanced/migrate) first.
+  </Warning>
+</Accordion>
+
+<Accordion title="Can clients see each other?">
+  **By default: No**
+  
+  WireGuard Easy configures clients in a hub-and-spoke model where:
+  - All clients can reach the server
+  - Clients cannot directly communicate with each other
+  - All traffic routes through the server
+  
+  **To allow client-to-client communication:**
+  This requires advanced WireGuard configuration beyond WireGuard Easy's scope.
+</Accordion>
+
+<Accordion title="How do I revoke a client's access?">
+  **Option 1: Delete the client (permanent)**
+  1. Open Web UI
+  2. Click the delete button next to the client
+  3. Confirm deletion
+  
+  **Option 2: Disable the client (temporary)**
+  1. Open Web UI
+  2. Click the toggle to disable the client
+  3. Client can be re-enabled later
+  
+  Changes take effect immediately - no need to restart.
+</Accordion>
+
+## Troubleshooting
+
+<Accordion title="Error: Cannot find device 'wg0'">
+  This means the WireGuard kernel module isn't loaded.
+  
+  **Solution:**
+  
+  ```bash
+  # Load the module
+  sudo modprobe wireguard
+  
+  # Make it persistent
+  echo "wireguard" | sudo tee -a /etc/modules
+  
+  # Restart container
+  cd /etc/docker/containers/wg-easy
+  sudo docker compose down
+  sudo docker compose up -d
+  ```
+  
+  See [Common Issues](/advanced/troubleshooting/common-issues#error-cannot-find-device-wg0) for details.
+</Accordion>
+
+<Accordion title="Error: iptables table 'nat' does not exist">
+  The NAT kernel module isn't loaded.
+  
+  **Solution:**
+  
+  ```bash
+  # Load iptables NAT module
+  sudo modprobe iptable_nat
+  
+  # Make it persistent
+  echo "iptable_nat" | sudo tee -a /etc/modules
+  
+  # For IPv6:
+  sudo modprobe ip6table_nat
+  echo "ip6table_nat" | sudo tee -a /etc/modules
+  
+  # Restart container
+  sudo docker compose down
+  sudo docker compose up -d
+  ```
+</Accordion>
+
+<Accordion title="Clients can connect but have no internet access">
+  **Common causes and solutions:**
+  
+  1. **IP forwarding not enabled:**
+     ```yaml
+     # Add to docker-compose.yml
+     sysctls:
+       - net.ipv4.ip_forward=1
+     ```
+  
+  2. **NAT not working:**
+     ```bash
+     # Check NAT rules
+     sudo docker compose exec wg-easy iptables -t nat -L -n -v
+     ```
+  
+  3. **DNS not configured:**
+     - Check client config has DNS set
+     - Default is 1.1.1.1, 1.0.0.1
+  
+  4. **Wrong AllowedIPs:**
+     - For full tunnel: `0.0.0.0/0, ::/0`
+     - Check client configuration
+  
+  See [Network Troubleshooting](/advanced/troubleshooting/networking#client-connects-but-no-internet) for detailed diagnostics.
+</Accordion>
+
+<Accordion title="Web UI is not accessible">
+  **Diagnostic steps:**
+  
+  ```bash
+  # 1. Check container is running
+  sudo docker compose ps
+  
+  # 2. Check logs for errors
+  sudo docker compose logs wg-easy
+  
+  # 3. Verify port is listening
+  sudo netstat -tulpn | grep 51821
+  
+  # 4. Test local access
+  curl http://localhost:51821
+  ```
+  
+  **Common solutions:**
+  
+  - Check firewall allows port 51821
+  - Verify HOST environment variable (should be 0.0.0.0)
+  - If using reverse proxy, check proxy configuration
+  - Ensure container has necessary permissions
+</Accordion>
+
+<Accordion title="Why should I use 'docker compose down' instead of 'stop'?">
+  **Important difference:**
+  
+  - `docker compose stop` - Pauses containers but keeps state
+  - `docker compose down` - Properly stops and removes containers
+  
+  Using `stop` can leave containers in an inconsistent state, causing:
+  - Configuration changes not taking effect
+  - Networking issues
+  - Startup failures
+  
+  **Always use:**
+  ```bash
+  sudo docker compose down
+  sudo docker compose up -d
+  ```
+  
+  Your configuration is preserved in the volume, so there's no data loss.
+</Accordion>
+
+## Security
+
+<Accordion title="Is WireGuard Easy secure?">
+  **Yes, when properly configured:**
+  
+  - Uses WireGuard protocol (modern, audited cryptography)
+  - Strong encryption by default (ChaCha20, Curve25519)
+  - Minimal attack surface
+  
+  **Security best practices:**
+  
+  1. Use strong passwords (or password hashes)
+  2. Enable 2FA for Web UI access
+  3. Keep software updated
+  4. Use HTTPS for Web UI (reverse proxy or SSL)
+  5. Limit Web UI access to trusted IPs
+  6. Regular security audits
+  7. Monitor logs for suspicious activity
+  
+  Never expose the Web UI port directly to the internet without SSL/TLS.
+</Accordion>
+
+<Accordion title="Should I expose the Web UI to the internet?">
+  **Not recommended without proper security:**
+  
+  **Best practices:**
+  
+  1. **Use a reverse proxy with SSL** (Traefik, Caddy, Nginx)
+  2. **Enable 2FA** for additional security
+  3. **Restrict access by IP** if possible
+  4. **Use strong authentication**
+  
+  **Alternative: Access via VPN**
+  
+  Only expose WireGuard port (51820/udp), then access Web UI through the VPN tunnel:
+  
+  ```yaml
+  ports:
+    - "51820:51820/udp"    # Public
+    - "127.0.0.1:51821:51821"  # Local only
+  ```
+</Accordion>
+
+<Accordion title="How often should I update WireGuard Easy?">
+  **Recommended update schedule:**
+  
+  - **Security updates:** Immediately when announced
+  - **Minor updates:** Monthly or quarterly
+  - **Major updates:** Review migration guide, test in staging first
+  
+  **Stay informed:**
+  
+  - Watch GitHub repository for releases
+  - Subscribe to security announcements
+  - Check CHANGELOG before updating
+  
+  **Automatic updates:**
+  
+  Consider using Watchtower for automatic updates, but test updates manually for major versions.
+</Accordion>
+
+<Accordion title="Are the client private keys stored securely?">
+  **Storage:**
+  
+  - Keys stored in `/etc/wireguard` inside container
+  - Mounted from Docker volume `etc_wireguard`
+  - Protected by Docker volume permissions
+  
+  **Security recommendations:**
+  
+  1. **Secure the host:** Only authorized users can access Docker
+  2. **Backup encryption:** Encrypt backup files
+  3. **Access control:** Limit Web UI access
+  4. **Regular rotation:** Regenerate client keys periodically
+  
+  Anyone with access to the volume can read keys - secure your host properly!
+</Accordion>
+
+## Performance & Scaling
+
+<Accordion title="What kind of server do I need?">
+  **For personal use (5-10 clients):**
+  
+  - 1 vCPU
+  - 512 MB RAM
+  - 10 GB storage
+  - 1 Gbps network
+  
+  **For small business (20-50 clients):**
+  
+  - 2 vCPU
+  - 1-2 GB RAM
+  - 20 GB storage
+  - 1-10 Gbps network
+  
+  **For high performance:**
+  
+  - CPU with AES-NI support
+  - More cores for concurrent connections
+  - SSD storage
+  - Low-latency network connection
+</Accordion>
+
+<Accordion title="How much bandwidth does WireGuard use?">
+  **Overhead:** Approximately 4% (60-100 bytes per packet)
+  
+  **Factors affecting bandwidth:**
+  
+  - Number of concurrent clients
+  - Client activity (streaming, browsing, downloads)
+  - Encryption overhead
+  - Keepalive packets (minimal)
+  
+  **Example:**
+  
+  - 10 clients streaming video = ~50-100 Mbps
+  - 5 clients browsing = ~5-10 Mbps
+  - Idle clients with keepalive = &lt;1 Kbps per client
+</Accordion>
+
+<Accordion title="Can I run multiple WireGuard Easy instances?">
+  **Yes, but each needs:**
+  
+  1. **Unique ports:**
+     ```yaml
+     # Instance 1
+     - "51820:51820/udp"
+     - "51821:51821"
+     
+     # Instance 2
+     - "51822:51820/udp"
+     - "51823:51821"
+     ```
+  
+  2. **Separate volumes:**
+     ```yaml
+     volumes:
+       - etc_wireguard_1:/etc/wireguard  # Instance 1
+       - etc_wireguard_2:/etc/wireguard  # Instance 2
+     ```
+  
+  3. **Different subnets:**
+     Configure each instance to use different IP ranges.
+  
+  **Use cases:**
+  - Separate networks (home, business)
+  - Geographic distribution
+  - Different security policies
+</Accordion>
+
+## Integration
+
+<Accordion title="Can I integrate WireGuard Easy with Pi-hole or AdGuard?">
+  **Yes!** See the [AdGuard Home integration](/deployment/adguard) for detailed setup.
+  
+  **Basic concept:**
+  
+  1. Install Pi-hole/AdGuard on same network
+  2. Configure WireGuard Easy to use it as DNS
+  3. Clients get ad-blocking through VPN
+  
+  ```yaml
+  environment:
+    - WG_DEFAULT_DNS=192.168.1.100  # Pi-hole/AdGuard IP
+  ```
+</Accordion>
+
+<Accordion title="Does WireGuard Easy support Prometheus metrics?">
+  **Yes!** See the [Prometheus metrics guide](/advanced/metrics/prometheus).
+  
+  WireGuard Easy can expose metrics for monitoring:
+  
+  - Client connections
+  - Bandwidth usage
+  - Transfer statistics
+  - System health
+</Accordion>
+
+<Accordion title="Can I use WireGuard Easy with Docker Swarm or Kubernetes?">
+  **Docker Swarm:** Limited support, requires host networking mode
+  
+  **Kubernetes:** Not officially supported
+  
+  WireGuard Easy is designed for Docker Compose on a single host. For orchestration:
+  
+  - Use host networking mode
+  - Careful volume management required
+  - Consider dedicated WireGuard Kubernetes operators instead
+</Accordion>
+
+## Migration & Compatibility
+
+<Accordion title="Can I migrate from v14 to v15?">
+  **Yes!** Follow the [migration guide](/advanced/migrate/from-14-to-15).
+  
+  **Key changes:**
+  
+  - New authentication system
+  - Updated configuration format
+  - Enhanced security features
+  
+  **Important:** Backup your configuration before migrating!
+</Accordion>
+
+<Accordion title="Can I import existing WireGuard configurations?">
+  **Limited support:**
+  
+  WireGuard Easy manages configurations in a specific format. To migrate:
+  
+  1. **Option 1:** Manually recreate clients in Web UI
+  2. **Option 2:** Use API to import clients programmatically
+  3. **Option 3:** Manually edit configuration files (advanced)
+  
+  For large migrations, consider using the API for bulk operations.
+</Accordion>
+
+<Accordion title="Is WireGuard Easy compatible with other WireGuard clients?">
+  **Yes, fully compatible!**
+  
+  WireGuard Easy generates standard WireGuard configurations that work with:
+  
+  - Official WireGuard apps (iOS, Android, macOS, Windows, Linux)
+  - WireGuard command-line tools
+  - Third-party WireGuard clients
+  - NetworkManager WireGuard plugin
+  
+  Download the configuration or scan the QR code with any WireGuard client.
+</Accordion>
+
+## Still Need Help?
+
+<Note>
+  Can't find your answer?
+  
+  - Check [Common Issues](/advanced/troubleshooting/common-issues)
+  - Review [Network Troubleshooting](/advanced/troubleshooting/networking)
+  - Search [GitHub Discussions](https://github.com/wg-easy/wg-easy/discussions)
+  - Open a new discussion with:
+    - WireGuard Easy version
+    - Docker version
+    - Host OS and kernel version
+    - Detailed problem description
+    - Relevant logs (sanitized)
+</Note>

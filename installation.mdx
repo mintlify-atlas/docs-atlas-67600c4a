@@ -1,0 +1,509 @@
+---
+title: Installation Guide
+description: Detailed installation instructions for WireGuard Easy including prerequisites, Docker setup, and deployment methods.
+---
+
+# Installation
+
+This guide provides detailed installation instructions for WireGuard Easy. Choose the deployment method that best fits your infrastructure.
+
+## Prerequisites
+
+Before installing WireGuard Easy, ensure your system meets these requirements:
+
+### System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Operating System" icon="linux">
+    Any Linux distribution with kernel 3.10 or higher
+  </Card>
+  
+  <Card title="Architecture" icon="microchip">
+    x86_64 (amd64) or arm64 (aarch64)
+  </Card>
+  
+  <Card title="RAM" icon="memory">
+    Minimum 512MB, recommended 1GB or more
+  </Card>
+  
+  <Card title="Storage" icon="hard-drive">
+    At least 1GB free disk space
+  </Card>
+</CardGroup>
+
+### Required Software
+
+1. **Container Runtime**: Docker or Podman
+2. **curl**: For downloading configuration files
+3. **Kernel Modules**: WireGuard and iptables modules (usually pre-installed)
+
+### Network Requirements
+
+- **Public IP address** or **domain name** for clients to connect
+- **Port 51820/UDP**: WireGuard VPN traffic (customizable)
+- **Port 51821/TCP**: Web UI access (customizable)
+- Ability to configure firewall rules
+
+<Warning>
+Ensure your hosting provider allows VPN traffic. Some cloud providers restrict or block VPN protocols on certain instance types.
+</Warning>
+
+## Installing Docker
+
+WireGuard Easy runs in a Docker container. If Docker is not already installed, follow these instructions:
+
+### Quick Installation
+
+For most Linux distributions, use the official Docker installation script:
+
+```bash
+curl -sSL https://get.docker.com | sh
+```
+
+This script automatically:
+- Detects your Linux distribution
+- Adds the Docker repository
+- Installs Docker Engine and Docker Compose
+- Configures the Docker service to start on boot
+
+### Verify Installation
+
+Check that Docker is installed and running:
+
+```bash
+docker --version
+docker compose version
+```
+
+Expected output:
+```
+Docker version 24.x.x, build xxxxxxx
+Docker Compose version v2.x.x
+```
+
+### Distribution-Specific Installation
+
+<CodeGroup>
+```bash Ubuntu/Debian
+# Update package index
+sudo apt-get update
+
+# Install prerequisites
+sudo apt-get install -y ca-certificates curl gnupg
+
+# Add Docker's official GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Set up repository
+echo \
+  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+```bash RHEL/CentOS/Fedora
+# Remove old versions
+sudo dnf remove docker docker-client docker-client-latest \
+  docker-common docker-latest docker-latest-logrotate \
+  docker-logrotate docker-engine
+
+# Set up repository
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager --add-repo \
+  https://download.docker.com/linux/fedora/docker-ce.repo
+
+# Install Docker
+sudo dnf install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+
+# Start Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+```bash Arch Linux
+# Install Docker
+sudo pacman -S docker docker-compose
+
+# Start and enable Docker
+sudo systemctl start docker.service
+sudo systemctl enable docker.service
+```
+</CodeGroup>
+
+<Note>
+For detailed installation instructions specific to your distribution, visit the [official Docker documentation](https://docs.docker.com/engine/install/).
+</Note>
+
+## Deployment Methods
+
+WireGuard Easy supports multiple deployment methods. Choose the one that fits your needs:
+
+### Method 1: Docker Compose (Recommended)
+
+Docker Compose is the recommended method for most users as it provides:
+- Easy configuration management
+- Network and volume management
+- Simple updates and maintenance
+
+<Steps>
+  <Step title="Create Configuration Directory">
+    ```bash
+    sudo mkdir -p /etc/docker/containers/wg-easy
+    ```
+  </Step>
+  
+  <Step title="Download Docker Compose File">
+    ```bash
+    sudo curl -o /etc/docker/containers/wg-easy/docker-compose.yml \
+      https://raw.githubusercontent.com/wg-easy/wg-easy/master/docker-compose.yml
+    ```
+  </Step>
+  
+  <Step title="Review and Customize (Optional)">
+    Edit the compose file to customize settings:
+    
+    ```bash
+    sudo nano /etc/docker/containers/wg-easy/docker-compose.yml
+    ```
+    
+    Available environment variables:
+    
+    ```yaml
+    environment:
+      - PORT=51821          # Web UI port
+      - HOST=0.0.0.0        # Web UI bind address
+      - INSECURE=false      # Allow HTTP access (set to true for testing)
+      - DISABLE_IPV6=false  # Disable IPv6 support
+    ```
+  </Step>
+  
+  <Step title="Start WireGuard Easy">
+    ```bash
+    cd /etc/docker/containers/wg-easy
+    sudo docker compose up -d
+    ```
+  </Step>
+</Steps>
+
+### Method 2: Docker Run
+
+For simpler setups without Docker Compose:
+
+<Steps>
+  <Step title="Create Docker Network">
+    Create a bridge network with IPv6 support:
+    
+    ```bash
+    docker network create \
+      -d bridge --ipv6 \
+      --subnet 10.42.42.0/24 \
+      --subnet fdcc:ad94:bacf:61a3::/64 \
+      wg
+    ```
+  </Step>
+  
+  <Step title="Run Container">
+    ```bash
+    docker run -d \
+      --net wg \
+      --name wg-easy \
+      --ip6 fdcc:ad94:bacf:61a3::2a \
+      --ip 10.42.42.42 \
+      -v ~/.wg-easy:/etc/wireguard \
+      -v /lib/modules:/lib/modules:ro \
+      -p 51820:51820/udp \
+      -p 51821:51821/tcp \
+      --cap-add NET_ADMIN \
+      --cap-add SYS_MODULE \
+      --sysctl net.ipv4.ip_forward=1 \
+      --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+      --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+      --sysctl net.ipv6.conf.all.forwarding=1 \
+      --sysctl net.ipv6.conf.default.forwarding=1 \
+      --restart unless-stopped \
+      ghcr.io/wg-easy/wg-easy:15
+    ```
+  </Step>
+</Steps>
+
+<Info>
+The web UI will be available at `http://your-server-ip:51821` after container startup.
+</Info>
+
+### Method 3: Podman
+
+For systems using Podman instead of Docker:
+
+<Note>
+When using Podman, you need to uncomment the `NET_RAW` capability in the configuration:
+
+```yaml
+cap_add:
+  - NET_ADMIN
+  - SYS_MODULE
+  - NET_RAW  # Required for Podman
+```
+</Note>
+
+Refer to the [Podman documentation](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/podman-nft/) for detailed setup instructions with nftables.
+
+## Configuration Options
+
+Customize WireGuard Easy behavior using environment variables:
+
+### Web UI Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `51821` | TCP port for the web UI |
+| `HOST` | `0.0.0.0` | IP address the web UI binds to |
+| `INSECURE` | `false` | Allow HTTP access (disable for production) |
+
+### Network Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DISABLE_IPV6` | `false` | Disable IPv6 support entirely |
+
+<Warning>
+Disabling IPv6 will prevent the creation of IPv6 firewall rules and won't assign IPv6 addresses to clients. However, IPv6 addresses may still appear in the web UI.
+</Warning>
+
+### Example: Custom Port Configuration
+
+```yaml
+services:
+  wg-easy:
+    environment:
+      - PORT=8080
+      - INSECURE=false
+    image: ghcr.io/wg-easy/wg-easy:15
+    # ... rest of configuration
+    ports:
+      - "51820:51820/udp"
+      - "8080:8080/tcp"  # Match PORT environment variable
+```
+
+## Firewall Configuration
+
+Configure your firewall to allow WireGuard traffic:
+
+<CodeGroup>
+```bash UFW (Ubuntu/Debian)
+# Allow WireGuard VPN
+sudo ufw allow 51820/udp
+
+# Allow Web UI (remove after setting up reverse proxy)
+sudo ufw allow 51821/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+```bash firewalld (RHEL/CentOS/Fedora)
+# Allow WireGuard VPN
+sudo firewall-cmd --permanent --add-port=51820/udp
+
+# Allow Web UI
+sudo firewall-cmd --permanent --add-port=51821/tcp
+
+# Reload firewall
+sudo firewall-cmd --reload
+```
+
+```bash iptables
+# Allow WireGuard VPN
+sudo iptables -A INPUT -p udp --dport 51820 -j ACCEPT
+
+# Allow Web UI
+sudo iptables -A INPUT -p tcp --dport 51821 -j ACCEPT
+
+# Save rules (Debian/Ubuntu)
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+
+# Save rules (RHEL/CentOS)
+sudo service iptables save
+```
+</CodeGroup>
+
+<Tip>
+Once you've set up a reverse proxy with HTTPS, you can remove the direct web UI port (51821) from your firewall rules and only allow traffic through your reverse proxy.
+</Tip>
+
+## Kernel Module Verification
+
+Verify that required kernel modules are available:
+
+### Check WireGuard Module
+
+```bash
+sudo modprobe wireguard
+lsmod | grep wireguard
+```
+
+If the module is not found, install WireGuard kernel module:
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y wireguard
+```
+
+```bash RHEL/CentOS
+sudo dnf install -y wireguard-tools
+```
+
+```bash Arch Linux
+sudo pacman -S wireguard-tools
+```
+</CodeGroup>
+
+### Load Modules on Boot
+
+Ensure modules load automatically on system startup:
+
+```bash
+echo "wireguard" | sudo tee -a /etc/modules
+echo "iptable_nat" | sudo tee -a /etc/modules
+echo "ip6table_nat" | sudo tee -a /etc/modules
+```
+
+## Verifying Installation
+
+After installation, verify everything is working:
+
+### Check Container Status
+
+```bash
+# For Docker Compose
+sudo docker compose ps
+
+# For Docker Run
+sudo docker ps | grep wg-easy
+```
+
+Expected output showing container is "Up":
+```
+NAME      IMAGE                           STATUS
+wg-easy   ghcr.io/wg-easy/wg-easy:15     Up 2 minutes
+```
+
+### View Container Logs
+
+```bash
+# For Docker Compose
+sudo docker compose logs -f
+
+# For Docker Run
+sudo docker logs -f wg-easy
+```
+
+### Test Web UI Access
+
+Open your browser and navigate to:
+
+```
+http://your-server-ip:51821
+```
+
+You should see the WireGuard Easy setup wizard.
+
+## Post-Installation Steps
+
+After successful installation:
+
+<Steps>
+  <Step title="Complete Setup Wizard">
+    Access the web UI and complete the initial setup by creating an admin account and configuring your server's public host.
+  </Step>
+  
+  <Step title="Set Up Reverse Proxy">
+    Configure a reverse proxy (Traefik, Caddy, or Nginx) with HTTPS for secure access to the web UI.
+  </Step>
+  
+  <Step title="Enable 2FA (Optional)">
+    Enable two-factor authentication for enhanced security of your admin account.
+  </Step>
+  
+  <Step title="Create VPN Clients">
+    Use the web interface to create VPN client configurations for your devices.
+  </Step>
+</Steps>
+
+## Updating WireGuard Easy
+
+Keep your installation up to date with the latest features and security patches:
+
+### Docker Compose Update
+
+```bash
+cd /etc/docker/containers/wg-easy
+sudo docker compose pull
+sudo docker compose down
+sudo docker compose up -d
+```
+
+### Docker Run Update
+
+```bash
+# Stop and remove old container
+sudo docker stop wg-easy
+sudo docker rm wg-easy
+
+# Pull latest image
+sudo docker pull ghcr.io/wg-easy/wg-easy:15
+
+# Run new container (use same command as initial installation)
+```
+
+<Tip>
+Consider setting up automatic updates for hands-free maintenance. See the auto-updates documentation for details.
+</Tip>
+
+## Uninstalling WireGuard Easy
+
+To completely remove WireGuard Easy:
+
+```bash
+# Stop and remove container
+cd /etc/docker/containers/wg-easy
+sudo docker compose down -v  # -v removes volumes
+
+# Remove configuration directory (optional)
+sudo rm -rf /etc/docker/containers/wg-easy
+
+# Remove Docker image (optional)
+sudo docker rmi ghcr.io/wg-easy/wg-easy:15
+```
+
+<Warning>
+The `-v` flag removes all data including client configurations. Backup your data before uninstalling if you plan to reinstall later.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="play" href="/getting-started">
+    Complete guide to configuring and using WireGuard Easy
+  </Card>
+  
+  <Card title="Client Management" icon="users">
+    Learn how to create and manage VPN clients
+  </Card>
+  
+  <Card title="Reverse Proxy Setup" icon="shield">
+    Secure your web UI with HTTPS
+  </Card>
+  
+  <Card title="Advanced Configuration" icon="gear">
+    Explore advanced settings and features
+  </Card>
+</CardGroup>

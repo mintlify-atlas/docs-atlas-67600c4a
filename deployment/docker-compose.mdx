@@ -1,0 +1,434 @@
+---
+title: "Docker Compose Deployment"
+description: "Deploy WireGuard Easy using Docker Compose with IPv4/IPv6 support"
+---
+
+Docker Compose is the recommended way to deploy WireGuard Easy. It simplifies configuration management and makes updates easier.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- Docker Engine installed (version 20.10 or higher)
+- Docker Compose v2 installed
+- A host with a public IP address or domain name
+- Root or sudo access to your host
+- Supported architecture: x86_64 or arm64
+
+<Note>
+  For Docker installation instructions, see the [official Docker documentation](https://docs.docker.com/engine/install/).
+</Note>
+
+## Quick Start
+
+<Steps>
+  <Step title="Create configuration directory">
+    Create a directory to store your Docker Compose configuration:
+
+    ```bash
+    sudo mkdir -p /etc/docker/containers/wg-easy
+    cd /etc/docker/containers/wg-easy
+    ```
+  </Step>
+
+  <Step title="Download docker-compose.yml">
+    Download the official Docker Compose file:
+
+    ```bash
+    sudo curl -o docker-compose.yml https://raw.githubusercontent.com/wg-easy/wg-easy/master/docker-compose.yml
+    ```
+
+    Or create it manually with the configuration shown in the next section.
+  </Step>
+
+  <Step title="Start the service">
+    Launch WireGuard Easy:
+
+    ```bash
+    sudo docker compose up -d
+    ```
+  </Step>
+
+  <Step title="Configure firewall">
+    Open the required ports in your firewall:
+
+    - **UDP 51820**: WireGuard VPN traffic
+    - **TCP 51821**: Web UI (if not using a reverse proxy)
+
+    Example using `ufw`:
+
+    ```bash
+    sudo ufw allow 51820/udp
+    sudo ufw allow 51821/tcp
+    ```
+  </Step>
+
+  <Step title="Access the Web UI">
+    Open your browser and navigate to:
+
+    ```
+    http://YOUR_SERVER_IP:51821
+    ```
+
+    <Warning>
+      The default configuration uses HTTP. For production, set up a reverse proxy with HTTPS.
+    </Warning>
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+Here's a complete `docker-compose.yml` configuration with all options:
+
+```yaml docker-compose.yml
+volumes:
+  etc_wireguard:
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    
+    # Network configuration with IPv4 and IPv6
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
+    
+    # Volume mounts
+    volumes:
+      - etc_wireguard:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    
+    # Port mappings
+    ports:
+      - "51820:51820/udp"  # WireGuard
+      - "51821:51821/tcp"  # Web UI
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Required capabilities
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      # - NET_RAW  # Uncomment if using Podman
+    
+    # Kernel parameters
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+    
+    # Optional environment variables
+    environment:
+      - PORT=51821            # Web UI port
+      - HOST=0.0.0.0          # Web UI bind address
+      - INSECURE=true         # Allow HTTP access (use reverse proxy in production)
+      # - DISABLE_IPV6=false  # Set to true to disable IPv6
+
+networks:
+  wg:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+```
+
+## Environment Variables
+
+<CodeGroup>
+
+```yaml Optional Configuration
+environment:
+  - PORT=51821              # TCP port for Web UI (default: 51821)
+  - HOST=0.0.0.0            # IP address Web UI binds to (default: 0.0.0.0)
+  - INSECURE=false          # Allow HTTP access (default: false)
+  - DISABLE_IPV6=false      # Disable IPv6 support (default: false)
+```
+
+```yaml Unattended Setup
+environment:
+  # Enable unattended setup (required for all other INIT_ variables)
+  - INIT_ENABLED=true
+  
+  # Admin credentials (required together)
+  - INIT_USERNAME=admin
+  - INIT_PASSWORD=SecureP@ssw0rd
+  - INIT_HOST=vpn.example.com
+  - INIT_PORT=51820
+  
+  # Optional: Custom DNS servers
+  - INIT_DNS=1.1.1.1,8.8.8.8
+  
+  # Optional: Custom network ranges (must set both)
+  - INIT_IPV4_CIDR=10.8.0.0/24
+  - INIT_IPV6_CIDR=2001:0DB8::/32
+  
+  # Optional: Custom allowed IPs
+  - INIT_ALLOWED_IPS=10.8.0.0/24,2001:0DB8::/32
+```
+
+</CodeGroup>
+
+<Warning>
+  **Security Note**: When using unattended setup, remove the `INIT_PASSWORD` variable after the first start to prevent password exposure.
+</Warning>
+
+## Network Configuration
+
+### IPv6 Support
+
+The default configuration includes full IPv6 support. The network is configured with both IPv4 and IPv6 subnets:
+
+- **IPv4**: `10.42.42.0/24`
+- **IPv6**: `fdcc:ad94:bacf:61a3::/64`
+
+<Note>
+  If you disable IPv6 with `DISABLE_IPV6=true`, the IPv6 firewall rules won't be created, but an IPv6 address may still appear in the Web UI (it won't be functional).
+</Note>
+
+### Using Host Network Mode
+
+If you need to use host network mode instead of bridge:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    network_mode: host
+    # Remove 'networks' and 'ports' sections
+```
+
+<Warning>
+  Host network mode reduces isolation. Use bridge mode unless you have specific requirements.
+</Warning>
+
+## Volume Management
+
+WireGuard Easy stores all configuration in `/etc/wireguard`. The compose file uses a named volume for persistence:
+
+```yaml
+volumes:
+  etc_wireguard:  # Managed by Docker
+```
+
+### Using a Bind Mount
+
+If you prefer to use a bind mount for easier access:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    volumes:
+      - /opt/wg-easy/config:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+```
+
+Create the directory first:
+
+```bash
+sudo mkdir -p /opt/wg-easy/config
+sudo chmod 700 /opt/wg-easy/config
+```
+
+## Reverse Proxy Integration
+
+For production deployments, use a reverse proxy with HTTPS:
+
+<CodeGroup>
+
+```yaml Traefik Labels
+services:
+  wg-easy:
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
+      traefik: {}
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wg-easy.rule=Host(`vpn.example.com`)"
+      - "traefik.http.routers.wg-easy.entrypoints=websecure"
+      - "traefik.http.routers.wg-easy.service=wg-easy"
+      - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
+      - "traefik.docker.network=traefik"
+    
+    environment:
+      - INSECURE=false  # Disable HTTP when using reverse proxy
+
+networks:
+  wg:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+  traefik:
+    external: true
+```
+
+```yaml Caddy
+services:
+  wg-easy:
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
+      caddy: {}
+    
+    environment:
+      - INSECURE=false
+
+networks:
+  wg:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+  caddy:
+    external: true
+```
+
+</CodeGroup>
+
+## Management Commands
+
+### Update to Latest Version
+
+```bash
+cd /etc/docker/containers/wg-easy
+sudo docker compose pull
+sudo docker compose up -d
+```
+
+### View Logs
+
+```bash
+sudo docker compose logs -f wg-easy
+```
+
+### Restart Service
+
+```bash
+sudo docker compose restart
+```
+
+### Stop Service
+
+```bash
+sudo docker compose down
+```
+
+### Backup Configuration
+
+```bash
+sudo docker run --rm \
+  -v wg-easy_etc_wireguard:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/wg-easy-backup.tar.gz -C /data .
+```
+
+### Restore Configuration
+
+```bash
+sudo docker run --rm \
+  -v wg-easy_etc_wireguard:/data \
+  -v $(pwd):/backup \
+  alpine tar xzf /backup/wg-easy-backup.tar.gz -C /data
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Container fails to start">
+    Check if the required kernel modules are loaded:
+
+    ```bash
+    lsmod | grep wireguard
+    sudo modprobe wireguard
+    ```
+
+    Verify Docker has the necessary capabilities:
+
+    ```bash
+    sudo docker compose logs wg-easy
+    ```
+  </Accordion>
+
+  <Accordion title="Cannot access Web UI">
+    Verify the container is running and ports are mapped:
+
+    ```bash
+    sudo docker compose ps
+    sudo docker compose port wg-easy 51821
+    ```
+
+    Check firewall rules:
+
+    ```bash
+    sudo ufw status
+    sudo iptables -L -n | grep 51821
+    ```
+  </Accordion>
+
+  <Accordion title="IPv6 not working">
+    Ensure IPv6 is enabled on your host:
+
+    ```bash
+    sysctl net.ipv6.conf.all.disable_ipv6
+    ```
+
+    If disabled, enable it:
+
+    ```bash
+    sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
+    sudo sysctl -w net.ipv6.conf.default.disable_ipv6=0
+    ```
+
+    Verify Docker IPv6 support:
+
+    ```bash
+    docker network inspect wg-easy_wg | grep IPv6
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    Ensure volumes have correct permissions:
+
+    ```bash
+    sudo chown -R root:root /etc/wireguard
+    sudo chmod -R 700 /etc/wireguard
+    ```
+  </Accordion>
+
+  <Accordion title="Clients cannot connect">
+    Verify WireGuard port is accessible:
+
+    ```bash
+    sudo netstat -ulnp | grep 51820
+    ```
+
+    Test from another machine:
+
+    ```bash
+    nc -zvu YOUR_SERVER_IP 51820
+    ```
+
+    Check NAT configuration in your router/firewall.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  For more deployment examples including reverse proxy configurations, see [Traefik Setup](/deployment/traefik) and [Caddy Setup](/deployment/caddy).
+</Note>

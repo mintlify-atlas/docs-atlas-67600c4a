@@ -1,0 +1,383 @@
+---
+title: Unattended Setup
+description: Configure WireGuard Easy automatically on first startup using environment variables for automation and deployment tools
+---
+
+## Overview
+
+Unattended setup allows you to configure WireGuard Easy automatically on first startup without any user interaction. This is particularly useful when:
+
+- Deploying with automation tools like Ansible, Terraform, or Puppet
+- Running in CI/CD pipelines
+- Provisioning multiple instances with consistent configuration
+- Implementing infrastructure as code
+
+<Note>
+  Unattended setup variables are **only used during the first start** of the container. After the initial configuration is complete, these variables are ignored.
+</Note>
+
+## Environment Variables
+
+All unattended setup variables are grouped by dependency. Variables in the same group must be set together.
+
+### Group 0: Enable Unattended Setup
+
+<ParamField path="INIT_ENABLED" type="boolean" default="false" required>
+  Enable unattended setup mode.
+  
+  This must be set to `true` to activate the other `INIT_*` environment variables.
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_ENABLED=true
+  ```
+</ParamField>
+
+### Group 1: Required Configuration
+
+These variables must all be set together to skip the initial setup wizard.
+
+<ParamField path="INIT_USERNAME" type="string" required>
+  Admin username for the web UI.
+  
+  <Warning>
+    The username is not validated for complexity. Make sure to use a sufficiently long and secure username to prevent unauthorized access.
+  </Warning>
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_USERNAME=admin
+  ```
+</ParamField>
+
+<ParamField path="INIT_PASSWORD" type="string" required>
+  Admin password for the web UI.
+  
+  <Warning>
+    The password is not checked for complexity. Ensure you set a strong password with sufficient length and complexity. Weak passwords will prevent login.
+    
+    It's recommended to remove this variable from your docker-compose.yml after the initial setup to prevent password exposure.
+  </Warning>
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_PASSWORD=Se!ureP%ssw0rd123
+  ```
+</ParamField>
+
+<ParamField path="INIT_HOST" type="string" required>
+  Public hostname or IP address that clients will use to connect to the WireGuard server.
+  
+  This should be:
+  - Your server's public IP address, or
+  - A domain name pointing to your server (e.g., `vpn.example.com`)
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_HOST=vpn.example.com
+  ```
+</ParamField>
+
+<ParamField path="INIT_PORT" type="number" required>
+  UDP port that clients will connect to and WireGuard will listen on.
+  
+  This is the **WireGuard** port (default: 51820), not the web UI port.
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_PORT=51820
+  ```
+</ParamField>
+
+### Group 2: DNS Configuration
+
+<ParamField path="INIT_DNS" type="string">
+  Comma-separated list of DNS servers for clients.
+  
+  Sets the global DNS configuration that will be used by all clients by default. You can specify multiple DNS servers.
+  
+  **Popular DNS options:**
+  - Cloudflare: `1.1.1.1,1.0.0.1`
+  - Google: `8.8.8.8,8.8.4.4`
+  - Quad9: `9.9.9.9,149.112.112.112`
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_DNS=1.1.1.1,8.8.8.8
+  ```
+</ParamField>
+
+### Group 3: IP Address Configuration
+
+<Warning>
+  Both `INIT_IPV4_CIDR` and `INIT_IPV6_CIDR` must be set together. You cannot set one without the other.
+</Warning>
+
+<ParamField path="INIT_IPV4_CIDR" type="string">
+  IPv4 address range for the WireGuard network in CIDR notation.
+  
+  This defines the private IP address space that will be used for the VPN tunnel.
+  
+  **Common ranges:**
+  - `10.8.0.0/24` (254 usable addresses)
+  - `10.8.0.0/16` (65,534 usable addresses)
+  - `192.168.99.0/24` (254 usable addresses)
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_IPV4_CIDR=10.8.0.0/24
+  ```
+</ParamField>
+
+<ParamField path="INIT_IPV6_CIDR" type="string">
+  IPv6 address range for the WireGuard network in CIDR notation.
+  
+  This defines the IPv6 address space for the VPN tunnel.
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_IPV6_CIDR=fd00:db8::/64
+  ```
+</ParamField>
+
+### Group 4: Allowed IPs
+
+<ParamField path="INIT_ALLOWED_IPS" type="string">
+  Comma-separated list of IP ranges that clients can access through the VPN.
+  
+  This sets the global "Allowed IPs" configuration. Common configurations:
+  
+  - **Full tunnel** (all traffic through VPN): `0.0.0.0/0,::/0`
+  - **Split tunnel** (only VPN network): `10.8.0.0/24,fd00:db8::/64`
+  - **Custom ranges**: Specify exact networks clients should route through VPN
+  
+  **Example:**
+  ```yaml
+  environment:
+    - INIT_ALLOWED_IPS=10.8.0.0/24,fd00:db8::/64
+  ```
+</ParamField>
+
+## Complete Example
+
+Here's a complete docker-compose.yml with unattended setup:
+
+```yaml
+volumes:
+  etc_wireguard:
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    environment:
+      # Core settings
+      - PORT=51821
+      - HOST=0.0.0.0
+      
+      # Unattended setup (Group 0)
+      - INIT_ENABLED=true
+      
+      # Required configuration (Group 1)
+      - INIT_USERNAME=admin
+      - INIT_PASSWORD=MySecurePassword123!
+      - INIT_HOST=vpn.example.com
+      - INIT_PORT=51820
+      
+      # Optional: DNS configuration (Group 2)
+      - INIT_DNS=1.1.1.1,8.8.8.8
+      
+      # Optional: IP ranges (Group 3 - both required)
+      - INIT_IPV4_CIDR=10.8.0.0/24
+      - INIT_IPV6_CIDR=fd00:db8::/64
+      
+      # Optional: Allowed IPs (Group 4)
+      - INIT_ALLOWED_IPS=10.8.0.0/24,fd00:db8::/64
+    volumes:
+      - etc_wireguard:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+```
+
+## Minimal Example
+
+The minimum configuration required to skip the setup wizard:
+
+```yaml
+environment:
+  - INIT_ENABLED=true
+  - INIT_USERNAME=admin
+  - INIT_PASSWORD=YourSecurePassword123!
+  - INIT_HOST=vpn.example.com
+  - INIT_PORT=51820
+```
+
+## Security Best Practices
+
+<Warning>
+  Follow these security recommendations when using unattended setup:
+</Warning>
+
+### 1. Remove Credentials After Setup
+
+Once WireGuard Easy has been initialized, remove the `INIT_PASSWORD` variable from your configuration:
+
+```yaml
+# After first startup, update docker-compose.yml to:
+environment:
+  - INIT_ENABLED=true  # Can be left or removed
+  # - INIT_PASSWORD=... # Remove this line
+```
+
+Then restart the container:
+
+```bash
+docker-compose up -d
+```
+
+### 2. Use Strong Passwords
+
+The password is not validated for complexity. Use:
+- At least 16 characters
+- Mix of uppercase, lowercase, numbers, and special characters
+- Password manager to generate and store credentials
+
+### 3. Secure Environment Variables
+
+When using environment variables in production:
+
+- Use Docker secrets or external secret management
+- Avoid committing credentials to version control
+- Use `.env` files with appropriate permissions (mode 600)
+
+**Example with .env file:**
+
+```yaml
+# docker-compose.yml
+services:
+  wg-easy:
+    env_file:
+      - .env
+```
+
+```bash
+# .env (chmod 600)
+INIT_ENABLED=true
+INIT_USERNAME=admin
+INIT_PASSWORD=YourSecurePassword123!
+INIT_HOST=vpn.example.com
+INIT_PORT=51820
+```
+
+### 4. Use Long Usernames
+
+Don't use common usernames like `admin`. Use something unique:
+
+```yaml
+environment:
+  - INIT_USERNAME=wg-admin-$(openssl rand -hex 4)
+```
+
+## Automation Examples
+
+### Ansible Playbook
+
+```yaml
+- name: Deploy WireGuard Easy
+  hosts: vpn_servers
+  tasks:
+    - name: Create docker-compose directory
+      file:
+        path: /opt/wg-easy
+        state: directory
+
+    - name: Deploy docker-compose.yml
+      template:
+        src: docker-compose.yml.j2
+        dest: /opt/wg-easy/docker-compose.yml
+
+    - name: Start WireGuard Easy
+      docker_compose:
+        project_src: /opt/wg-easy
+        state: present
+```
+
+### Terraform Example
+
+```hcl
+resource "docker_container" "wg_easy" {
+  name  = "wg-easy"
+  image = "ghcr.io/wg-easy/wg-easy:15"
+
+  env = [
+    "INIT_ENABLED=true",
+    "INIT_USERNAME=${var.wg_username}",
+    "INIT_PASSWORD=${var.wg_password}",
+    "INIT_HOST=${var.wg_host}",
+    "INIT_PORT=51820",
+  ]
+
+  capabilities {
+    add = ["NET_ADMIN", "SYS_MODULE"]
+  }
+}
+```
+
+## Troubleshooting
+
+### Setup Not Running
+
+**Problem:** The setup wizard still appears even with `INIT_ENABLED=true`.
+
+**Solutions:**
+- Verify all Group 1 variables are set correctly
+- Check container logs for error messages
+- Ensure the volume is empty (setup only runs on first start)
+
+### Cannot Login
+
+**Problem:** Login fails with the configured credentials.
+
+**Solutions:**
+- Verify password meets minimum complexity (length)
+- Check for typos in username/password
+- Look for special characters that might need escaping in YAML
+
+### Variable Grouping Errors
+
+**Problem:** Setup fails with missing variable errors.
+
+**Solutions:**
+- Ensure all variables in the same group are set together
+- Check the group requirements in the documentation above
+- Review container logs for specific error messages
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="sliders" href="/configuration/environment-variables">
+    View all available environment variables
+  </Card>
+  <Card title="Docker Compose" icon="rocket" href="/deployment/docker-compose">
+    Complete installation guide with reverse proxy setup
+  </Card>
+</CardGroup>

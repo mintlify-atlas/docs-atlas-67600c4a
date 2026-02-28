@@ -1,0 +1,509 @@
+---
+title: Hooks & Automation
+description: Configure WireGuard hooks for network automation and custom scripting
+---
+
+## Overview
+
+Hooks in WireGuard Easy allow you to run custom shell commands at specific points in the interface and client lifecycle. These are powerful automation tools for configuring firewalls, routing, logging, and integrating with other systems.
+
+<Note>
+  Hooks execute with the same privileges as the WireGuard Easy process. Ensure your commands are secure and properly tested.
+</Note>
+
+---
+
+## Hook Types
+
+WireGuard Easy supports four types of hooks:
+
+<CardGroup cols={2}>
+  <Card title="PreUp" icon="arrow-up">
+    Executed **before** the WireGuard interface is brought up
+    
+    Use for: Initial setup, firewall rules preparation
+  </Card>
+  
+  <Card title="PostUp" icon="check">
+    Executed **after** the WireGuard interface is brought up
+    
+    Use for: Firewall rules, NAT configuration, routing
+  </Card>
+  
+  <Card title="PreDown" icon="arrow-down">
+    Executed **before** the WireGuard interface is brought down
+    
+    Use for: Cleanup preparation, logging
+  </Card>
+  
+  <Card title="PostDown" icon="xmark">
+    Executed **after** the WireGuard interface is brought down
+    
+    Use for: Firewall cleanup, connection notifications
+  </Card>
+</CardGroup>
+
+---
+
+## Configuration Levels
+
+Hooks can be configured at two levels:
+
+### Server-Level Hooks
+
+Apply to the entire WireGuard interface. Configure via:
+
+- **Web UI:** Admin → Hooks
+- **API:** `POST /api/admin/hooks`
+
+These hooks run when the WireGuard interface starts/stops.
+
+### Client-Level Hooks
+
+Apply to individual client configurations. Configure via:
+
+- **Web UI:** Edit Client → Advanced Settings
+- **API:** `POST /api/client/{clientId}` (include hook parameters)
+
+These hooks are included in the client's `.conf` file and run on the client device.
+
+<Warning>
+  Client-level hooks only execute on the client device, not on the server. The client must have appropriate permissions to run the commands.
+</Warning>
+
+---
+
+## Server-Level Hook Configuration
+
+### Via Web Interface
+
+1. Navigate to **Admin** → **Hooks**
+2. Enter commands for each hook type
+3. Click **Save**
+4. Restart the WireGuard interface to apply changes
+
+### Via API
+
+```bash
+curl -X POST https://example.com:51821/api/admin/hooks \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "preUp": "",
+    "postUp": "iptables -A FORWARD -i wg0 -j ACCEPT",
+    "preDown": "",
+    "postDown": "iptables -D FORWARD -i wg0 -j ACCEPT"
+  }'
+```
+
+---
+
+## Template Variables
+
+Hooks support template variables that are replaced at runtime:
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `{{port}}` | WireGuard listening port | `51820` |
+| `{{device}}` | Network device name | `wg0` |
+| `{{interface}}` | Interface name (alias for device) | `wg0` |
+| `{{ipv4Cidr}}` | IPv4 CIDR range | `10.8.0.0/24` |
+| `{{ipv6Cidr}}` | IPv6 CIDR range | `fd42:42:42::/64` |
+
+### Example Usage
+
+```bash
+# Using template variables in hooks
+iptables -A INPUT -p udp --dport {{port}} -j ACCEPT
+ip link set {{device}} mtu 1420
+```
+
+---
+
+## Common Use Cases
+
+### Firewall Rules with iptables
+
+Basic forwarding and NAT:
+
+**PostUp:**
+```bash
+iptables -A FORWARD -i wg0 -j ACCEPT; 
+iptables -A FORWARD -o wg0 -j ACCEPT; 
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+```
+
+**PostDown:**
+```bash
+iptables -D FORWARD -i wg0 -j ACCEPT; 
+iptables -D FORWARD -o wg0 -j ACCEPT; 
+iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+```
+
+### Firewall Rules with nftables
+
+Modern nftables-based firewall:
+
+**PostUp:**
+```bash
+nft add chain ip filter WG_EASY; 
+nft add rule ip filter DOCKER-USER jump WG_EASY; 
+nft add rule ip filter WG_EASY iifname {{device}} accept; 
+nft add rule ip filter WG_EASY oifname {{device}} accept
+```
+
+**PostDown:**
+```bash
+nft delete rule ip filter DOCKER-USER handle $(nft -a list chain ip filter DOCKER-USER | awk '/jump WG_EASY/ {print $NF}'); 
+nft flush chain ip filter WG_EASY; 
+nft delete chain ip filter WG_EASY
+```
+
+### Routed Setup (No NAT)
+
+For routed configurations where clients keep their real IPs:
+
+**PostUp:**
+```bash
+iptables -A INPUT -p udp -m udp --dport {{port}} -j ACCEPT; 
+iptables -A FORWARD -i wg0 -j ACCEPT; 
+iptables -A FORWARD -o wg0 -j ACCEPT; 
+ip6tables -A INPUT -p udp -m udp --dport {{port}} -j ACCEPT; 
+ip6tables -A FORWARD -i wg0 -j ACCEPT; 
+ip6tables -A FORWARD -o wg0 -j ACCEPT
+```
+
+**PostDown:**
+```bash
+iptables -D INPUT -p udp -m udp --dport {{port}} -j ACCEPT; 
+iptables -D FORWARD -i wg0 -j ACCEPT; 
+iptables -D FORWARD -o wg0 -j ACCEPT; 
+ip6tables -D INPUT -p udp -m udp --dport {{port}} -j ACCEPT; 
+ip6tables -D FORWARD -i wg0 -j ACCEPT; 
+ip6tables -D FORWARD -o wg0 -j ACCEPT
+```
+
+See the routed setup section below for complete configuration.
+
+### Split Tunneling
+
+Route only specific traffic through VPN:
+
+**PostUp (Client-side):**
+```bash
+ip route add 192.168.1.0/24 dev wg0
+```
+
+**PostDown (Client-side):**
+```bash
+ip route del 192.168.1.0/24 dev wg0
+```
+
+### DNS Override
+
+Set custom DNS servers:
+
+**PostUp (Client-side):**
+```bash
+echo "nameserver 1.1.1.1" > /etc/resolv.conf.wg; 
+cp /etc/resolv.conf.wg /etc/resolv.conf
+```
+
+**PostDown (Client-side):**
+```bash
+rm /etc/resolv.conf.wg
+```
+
+### Connection Logging
+
+Log when the interface comes up/down:
+
+**PostUp:**
+```bash
+logger "WireGuard interface {{device}} started at $(date)"
+```
+
+**PostDown:**
+```bash
+logger "WireGuard interface {{device}} stopped at $(date)"
+```
+
+### Webhook Notifications
+
+Notify external services:
+
+**PostUp:**
+```bash
+curl -X POST https://example.com/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"event": "wireguard_up", "interface": "{{device}}"}'
+```
+
+**PostDown:**
+```bash
+curl -X POST https://example.com/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"event": "wireguard_down", "interface": "{{device}}"}'
+```
+
+### Port Forwarding
+
+Forward specific ports to WireGuard clients:
+
+**PostUp:**
+```bash
+iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.8.0.2:8080
+```
+
+**PostDown:**
+```bash
+iptables -t nat -D PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.8.0.2:8080
+```
+
+---
+
+## Client-Level Hooks
+
+### Configuration via API
+
+```bash
+curl -X POST https://example.com:51821/api/client/1 \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Laptop",
+    "postUp": "echo Connection established | logger",
+    "postDown": "echo Connection closed | logger"
+  }'
+```
+
+### Client Configuration Example
+
+The generated `.conf` file will include:
+
+```ini
+[Interface]
+PrivateKey = CLIENT_PRIVATE_KEY
+Address = 10.8.0.2/24, fd42:42:42::2/64
+DNS = 1.1.1.1, 1.0.0.1
+
+PostUp = echo Connection established | logger
+PostDown = echo Connection closed | logger
+
+[Peer]
+PublicKey = SERVER_PUBLIC_KEY
+PresharedKey = PRE_SHARED_KEY
+Endpoint = example.com:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
+```
+
+<Warning>
+  Client-level hooks run on the client device with the client's permissions. Ensure users understand what the hooks do before distributing configurations.
+</Warning>
+
+---
+
+## Advanced Examples
+
+### Dynamic DNS Update
+
+**PostUp:**
+```bash
+CURRENT_IP=$(curl -s https://api.ipify.org); 
+curl -X PUT "https://dns-provider.com/api/update" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{"ip": "'$CURRENT_IP'"}'
+```
+
+### Traffic Accounting
+
+**PostUp:**
+```bash
+iptables -N WG_ACCOUNTING; 
+iptables -I FORWARD -j WG_ACCOUNTING; 
+iptables -A WG_ACCOUNTING -i wg0 -j RETURN; 
+iptables -A WG_ACCOUNTING -o wg0 -j RETURN
+```
+
+**PostDown:**
+```bash
+iptables -D FORWARD -j WG_ACCOUNTING; 
+iptables -F WG_ACCOUNTING; 
+iptables -X WG_ACCOUNTING
+```
+
+### QoS (Quality of Service)
+
+Prioritize certain traffic:
+
+**PostUp:**
+```bash
+tc qdisc add dev wg0 root tbf rate 50mbit burst 10kb latency 70ms; 
+tc filter add dev wg0 protocol ip parent 1:0 prio 1 u32 match ip dport 22 0xffff flowid 1:1
+```
+
+**PostDown:**
+```bash
+tc qdisc del dev wg0 root
+```
+
+### Conditional Routing
+
+Route based on source:
+
+**PostUp:**
+```bash
+ip rule add from 10.8.0.2 table 100; 
+ip route add default via 192.168.1.1 table 100
+```
+
+**PostDown:**
+```bash
+ip rule del from 10.8.0.2 table 100; 
+ip route flush table 100
+```
+
+---
+
+## Database Storage
+
+Hooks are stored in the SQLite database:
+
+### Server Hooks Table
+
+```sql
+CREATE TABLE hooks_table (
+  id TEXT PRIMARY KEY,           -- References interface name
+  pre_up TEXT NOT NULL,
+  post_up TEXT NOT NULL,
+  pre_down TEXT NOT NULL,
+  post_down TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+### Client Hooks Storage
+
+Client hooks are stored in the `client` table as individual columns:
+- `pre_up`
+- `post_up`
+- `pre_down`
+- `post_down`
+
+---
+
+## Security Considerations
+
+<AccordionGroup>
+  <Accordion title="Command Injection Prevention">
+    - Never use user input directly in hooks without validation
+    - Avoid using hooks that execute based on client-provided data
+    - Use template variables instead of string concatenation
+    - Validate all external data before use in commands
+  </Accordion>
+
+  <Accordion title="Privilege Management">
+    - Hooks run with the same privileges as WireGuard Easy
+    - Minimize required permissions using principle of least privilege
+    - Consider running sensitive operations through sudo with specific rules
+    - Audit hook commands regularly
+  </Accordion>
+
+  <Accordion title="Error Handling">
+    - Test hooks thoroughly before deployment
+    - Failed hooks may prevent interface startup
+    - Use `|| true` to allow hook failures: `command || true`
+    - Log hook output for debugging
+  </Accordion>
+
+  <Accordion title="Client-Side Hooks">
+    - Clearly document what client hooks do
+    - Avoid distributing configs with destructive hooks
+    - Consider security implications of hooks running on client devices
+    - Educate users about hook functionality
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Troubleshooting
+
+### Hooks Not Executing
+
+1. Check WireGuard Easy logs:
+   ```bash
+   docker logs wg-easy
+   ```
+
+2. Verify hook syntax:
+   ```bash
+   # Test command manually
+   iptables -A FORWARD -i wg0 -j ACCEPT
+   ```
+
+3. Check permissions:
+   ```bash
+   # Ensure WireGuard Easy has necessary capabilities
+   docker exec wg-easy sh -c "iptables -L"
+   ```
+
+### Interface Fails to Start
+
+- A failed PostUp hook can prevent the interface from starting
+- Check logs for error messages
+- Temporarily remove hooks to isolate the issue
+- Test hooks individually
+
+### Template Variables Not Replaced
+
+- Ensure you're using double curly braces: `{{variable}}`
+- Variables are case-sensitive
+- Only supported variables are replaced (see table above)
+
+### Client Hooks Not Working
+
+- Client hooks only run on the client device
+- Client must have appropriate permissions (e.g., root for iptables)
+- Check client-side WireGuard logs
+- Some mobile WireGuard apps don't support hooks
+
+---
+
+## Best Practices
+
+<Steps>
+  <Step title="Test in Development">
+    Always test hooks in a development environment before deploying to production.
+  </Step>
+  
+  <Step title="Use Idempotent Commands">
+    Ensure hooks can be run multiple times without causing issues. Use `-D` to delete before `-A` to add rules.
+  </Step>
+  
+  <Step title="Keep Hooks Simple">
+    Complex logic should be in external scripts. Keep hooks as simple command calls.
+  </Step>
+  
+  <Step title="Document Your Hooks">
+    Maintain documentation of what each hook does and why it's needed.
+  </Step>
+  
+  <Step title="Monitor Hook Execution">
+    Add logging to hooks to track when they run and if they succeed.
+  </Step>
+  
+  <Step title="Version Control">
+    Store hook configurations in version control alongside your infrastructure code.
+  </Step>
+</Steps>
+
+---
+
+## Related Documentation
+
+- [API Reference](/advanced/api) - Programmatically manage hooks
+- [Security Best Practices](/advanced/security) - Secure your WireGuard deployment
+- [Environment Variables](/configuration/environment-variables) - Configure WireGuard Easy
+- [WireGuard Documentation](https://www.wireguard.com/) - Official WireGuard docs

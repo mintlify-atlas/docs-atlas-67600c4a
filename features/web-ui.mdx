@@ -1,0 +1,339 @@
+---
+title: Web Interface
+description: Navigate and customize the WireGuard Easy web interface for optimal VPN management
+---
+
+The WireGuard Easy web interface provides an intuitive, responsive design for managing your VPN infrastructure from any device.
+
+## Interface Overview
+
+The web interface is built with Vue 3 and features a modern, dark mode-enabled design that adapts to your preferences.
+
+### Main Components
+
+<CardGroup cols={2}>
+  <Card title="Header" icon="bars">
+    Navigation, theme switching, language selection, and quick actions
+  </Card>
+  <Card title="Client Panel" icon="users">
+    Main workspace displaying all VPN clients with search and sort capabilities
+  </Card>
+  <Card title="Client Cards" icon="id-card">
+    Individual client information with quick action buttons
+  </Card>
+  <Card title="Action Dialogs" icon="window-maximize">
+    Modal windows for creating, editing, and configuring clients
+  </Card>
+</CardGroup>
+
+## Navigation
+
+### Header Bar
+
+The header contains essential controls and information:
+
+<Tabs>
+  <Tab title="Logo & Branding">
+    The WireGuard Easy logo in the top left provides a consistent brand identity and serves as a home button.
+  </Tab>
+  
+  <Tab title="Theme Switcher">
+    Toggle between light, dark, and system theme modes:
+    ```
+    Light Mode: Clean, bright interface
+    Dark Mode: Easy on the eyes for low-light environments
+    System: Follows your operating system preference
+    ```
+  </Tab>
+  
+  <Tab title="Language Selector">
+    Switch between available languages to localize the interface to your preferred language.
+  </Tab>
+  
+  <Tab title="Chart Toggle">
+    Enable or disable real-time traffic visualization on client cards for better performance on slower devices.
+  </Tab>
+  
+  <Tab title="User Menu">
+    Access account settings, profile management, and logout options.
+  </Tab>
+</Tabs>
+
+### Update Notifications
+
+When a new version is available, an update banner appears at the top of the interface:
+
+<Info>
+The system automatically checks for updates and notifies you when a new version is available. Updates ensure you have the latest features and security patches.
+</Info>
+
+## Client List Interface
+
+### Search and Filter
+
+Locate clients quickly with the built-in search functionality:
+
+<Steps>
+  <Step title="Click the Search Bar">
+    Located in the top right of the client panel, next to the sort button.
+  </Step>
+  
+  <Step title="Type to Filter">
+    Enter any part of a client name to filter the list in real-time.
+  </Step>
+  
+  <Step title="Clear Search">
+    Click the X button in the search bar to reset the filter.
+  </Step>
+</Steps>
+
+The search feature includes:
+- **Debounced Input**: 300ms delay prevents excessive filtering
+- **Case-Insensitive**: Matches regardless of capitalization
+- **Instant Feedback**: Visual confirmation of active filters
+
+### Sort Controls
+
+Organize clients by clicking the sort button:
+
+- **Ascending**: A-Z alphabetical order
+- **Descending**: Z-A reverse alphabetical order
+
+<Tip>
+Your sort preference is saved and persists across browser sessions.
+</Tip>
+
+## Client Cards
+
+Each client is displayed as a card with comprehensive information and quick actions.
+
+### Card Layout
+
+```
+┌─────────────────────────────────────────────┐
+│  [Avatar] Name                    [Actions]  │
+│           IP Address                         │
+│           Last Seen                          │
+│           One-Time Link (if active)          │
+│           Expiration Date (if set)           │
+│           ↑ TX / ↓ RX Statistics             │
+│  [Traffic Chart]                             │
+└─────────────────────────────────────────────┘
+```
+
+### Quick Actions
+
+Each card provides instant access to common operations:
+
+<CardGroup cols={2}>
+  <Card title="Enable/Disable Toggle" icon="toggle-on">
+    Switch to quickly enable or disable client access
+  </Card>
+  <Card title="Edit Button" icon="pen">
+    Opens the detailed configuration editor
+  </Card>
+  <Card title="QR Code" icon="qrcode">
+    Displays the configuration QR code for mobile devices
+  </Card>
+  <Card title="Download Config" icon="download">
+    Downloads the WireGuard configuration file
+  </Card>
+  <Card title="One-Time Link" icon="link">
+    Generates a temporary shareable configuration link
+  </Card>
+</CardGroup>
+
+### Visual Indicators
+
+**Avatar Colors**:
+- Each client has a unique color-coded avatar
+- Helps quickly identify clients visually
+
+**Connection Status**:
+- **Last Seen**: Shows time since last activity
+- Active connections display recent timestamps
+- Inactive clients show extended offline periods
+
+**Traffic Charts**:
+- **Upload (TX)**: Top chart in upload color
+- **Download (RX)**: Bottom chart in download color
+- Real-time sparkline visualization
+- Toggle visibility with header chart button
+
+## Responsive Design
+
+The interface adapts seamlessly to different screen sizes:
+
+<Tabs>
+  <Tab title="Desktop (1200px+)">
+    - Multi-column client grid
+    - Full navigation visible
+    - Expanded information display
+    - Side-by-side action buttons
+  </Tab>
+  
+  <Tab title="Tablet (768px - 1199px)">
+    - Two-column client grid
+    - Compact navigation
+    - Abbreviated labels
+    - Stacked action buttons
+  </Tab>
+  
+  <Tab title="Mobile (< 768px)">
+    - Single column layout
+    - Icon-only navigation
+    - Collapsed information
+    - Vertical action stacks
+  </Tab>
+</Tabs>
+
+## Theme Customization
+
+WireGuard Easy supports comprehensive theme customization:
+
+### Light Theme
+
+```css
+Background: White and light grays
+Text: Dark gray and black
+Accents: Red highlights
+Cards: White with subtle shadows
+```
+
+### Dark Theme
+
+```css
+Background: Neutral dark tones
+Text: Light gray and white
+Accents: Red highlights
+Cards: Dark gray with elevated appearance
+```
+
+<Note>
+The theme preference is stored locally and persists across sessions. The system theme option automatically switches based on your OS settings.
+</Note>
+
+## Dialogs and Modals
+
+Interactive operations use modal dialogs for focused workflows:
+
+### Dialog Components
+
+- **Create Client**: New client configuration wizard
+- **Edit Client**: Detailed configuration editor
+- **QR Code Display**: Full-screen QR code viewer
+- **Configuration Viewer**: Syntax-highlighted config display
+- **Delete Confirmation**: Safety prompt before deletion
+
+### Dialog Features
+
+<AccordionGroup>
+  <Accordion title="Keyboard Navigation">
+    - **Escape**: Close dialog
+    - **Tab**: Navigate between fields
+    - **Enter**: Submit form (when applicable)
+  </Accordion>
+  
+  <Accordion title="Accessibility">
+    - ARIA labels for screen readers
+    - Focus management
+    - Semantic HTML structure
+    - Keyboard-only operation support
+  </Accordion>
+  
+  <Accordion title="Validation">
+    - Real-time field validation
+    - Clear error messages
+    - Submit button disabled until valid
+    - Visual feedback for invalid inputs
+  </Accordion>
+</AccordionGroup>
+
+## Real-Time Updates
+
+The interface updates automatically to reflect current system state:
+
+- **Client List**: Refreshes every 1 second
+- **Traffic Stats**: Updates with each refresh
+- **Connection Status**: Real-time last seen updates
+- **Charts**: Animated data visualization
+
+<Warning>
+Frequent updates may impact performance on low-powered devices. Consider disabling charts if experiencing lag.
+</Warning>
+
+## Toast Notifications
+
+Operations provide immediate feedback through toast notifications:
+
+```
+Success: Green notification with checkmark
+Error: Red notification with error icon
+Info: Blue notification with info icon
+Warning: Yellow notification with warning icon
+```
+
+Notifications automatically dismiss after a few seconds or can be manually closed.
+
+## Accessibility Features
+
+### Keyboard Support
+
+- Full keyboard navigation throughout the interface
+- Logical tab order for form elements
+- Escape key closes dialogs and menus
+- Enter key submits forms
+
+### Screen Reader Support
+
+- Semantic HTML elements
+- ARIA labels and roles
+- Descriptive alt text
+- Logical heading hierarchy
+
+### Visual Accessibility
+
+- High contrast color schemes
+- Clear focus indicators
+- Readable font sizes
+- Consistent visual language
+
+## Performance Optimization
+
+The interface is optimized for performance:
+
+### Client-Side Caching
+
+- Configuration stored in browser
+- Reduced server requests
+- Instant page transitions
+
+### Lazy Loading
+
+- Components loaded on demand
+- Images loaded as needed
+- Reduced initial bundle size
+
+### Debounced Operations
+
+- Search input debounced at 300ms
+- Prevents excessive API calls
+- Smoother user experience
+
+<Tip>
+For the best experience, use a modern browser (Chrome, Firefox, Safari, or Edge) with JavaScript enabled.
+</Tip>
+
+## Browser Compatibility
+
+WireGuard Easy supports modern browsers:
+
+- **Chrome/Edge**: 90+
+- **Firefox**: 88+
+- **Safari**: 14+
+- **Mobile Safari**: 14+
+- **Chrome Mobile**: 90+
+
+<Info>
+Older browsers may work but are not officially supported. For security and performance reasons, always use the latest browser version.
+</Info>

@@ -1,0 +1,195 @@
+---
+title: Translation Guide
+description: Help translate WireGuard Easy into your language
+---
+
+WireGuard Easy supports multiple languages through internationalization (i18n). If you would like to contribute a translation, follow the steps below.
+
+## Translation Files
+
+All translation files are located in `src/i18n/locales/`. Each language has its own JSON file named with its locale code (e.g., `en.json` for English, `fr.json` for French).
+
+## Add a New Translation
+
+<Steps>
+  <Step title="Create Translation File">
+    Create a new file in `src/i18n/locales/` named `<locale_code>.json`.
+    
+    For example, for French:
+    
+    ```bash
+    touch src/i18n/locales/fr.json
+    ```
+    
+    Copy the structure from `src/i18n/locales/en.json` and translate all the values.
+  </Step>
+
+  <Step title="Import in i18n Config">
+    Import and add the newly created file in `src/i18n/i18n.config.ts`.
+    
+    ```typescript
+    import fr from './locales/fr.json'
+    
+    // Add to the resources object
+    export default {
+      // ...
+      resources: {
+        en,
+        fr, // Add your language
+        // ...
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Update Nuxt Config">
+    Add your language to the `src/nuxt.config.ts` file. You need to specify:
+    
+    - **code**: The name of the translation file without the extension (e.g., `fr` for `fr.json`)
+    - **language**: The BCP 47 language tag with region (e.g., `fr-FR` for French). See [www.lingoes.net](http://www.lingoes.net/en/translator/langcode.htm) for a list of language codes
+    - **name**: The display name of the language (e.g., `Français` for French)
+    
+    ```typescript
+    export default defineNuxtConfig({
+      i18n: {
+        locales: [
+          { code: 'en', language: 'en-US', name: 'English' },
+          { code: 'fr', language: 'fr-FR', name: 'Français' }, // Add your language
+          // ...
+        ]
+      }
+    })
+    ```
+  </Step>
+
+  <Step title="Test Your Translation">
+    Start the development server and test your translation:
+    
+    ```bash
+    cd src
+    pnpm dev
+    ```
+    
+    Navigate to the application and switch to your new language in the language selector.
+  </Step>
+</Steps>
+
+## Update an Existing Translation
+
+If you need to update an existing translation:
+
+1. Find the corresponding `<locale_code>.json` file in `src/i18n/locales/`
+2. Edit the translations that need updating
+3. Ensure you maintain the same JSON structure
+
+## Translation Completeness
+
+You can check translation completeness using the i18n script:
+
+```bash
+pnpm scripts:i18n
+```
+
+This runs `scripts/i18n.sh`, which compares all translation files against the English base file (`en.json`) and shows completion percentages:
+
+```
+- [x] en (100%)
+- [x] fr (100%)
+- [ ] de (75%)
+```
+
+## Translation Guidelines
+
+### General Principles
+
+- **Maintain consistency** - Use consistent terminology throughout the translation
+- **Keep the tone** - Match the friendly and professional tone of the English version
+- **Preserve formatting** - Don't translate placeholders like `{variable}` or HTML tags
+- **Consider context** - Some terms may need different translations based on context
+
+### Technical Terms
+
+- **WireGuard** - Always keep as "WireGuard" (brand name)
+- **Client/Server** - Translate or keep in English based on common usage in your language
+- **QR Code** - Usually kept as "QR Code" in most languages
+
+### Placeholders and Variables
+
+Do not translate text inside curly braces:
+
+```json
+{
+  "welcome": "Welcome, {username}!"
+}
+```
+
+In French:
+
+```json
+{
+  "welcome": "Bienvenue, {username} !"
+}
+```
+
+### HTML and Markdown
+
+Preserve HTML tags and markdown formatting:
+
+```json
+{
+  "message": "Click <strong>here</strong> to continue"
+}
+```
+
+## Submit Your Translation
+
+Once you've completed your translation:
+
+<Steps>
+  <Step title="Test Thoroughly">
+    Test your translation in the application to ensure:
+    - All strings are properly translated
+    - Text fits properly in the UI
+    - No formatting issues
+  </Step>
+
+  <Step title="Run Checks">
+    Ensure your code passes all checks:
+    
+    ```bash
+    cd src
+    pnpm check:all
+    ```
+  </Step>
+
+  <Step title="Create Pull Request">
+    Follow the [Pull Request workflow](/contributing/development#pull-request-workflow) to submit your translation.
+    
+    In your PR description, mention:
+    - The language you're adding or updating
+    - Translation completion percentage
+    - Any specific terms or phrases that needed special consideration
+  </Step>
+</Steps>
+
+## Translation Status
+
+To see the current status of all translations, check the translation completeness by running:
+
+```bash
+pnpm scripts:i18n
+```
+
+This helps identify languages that need updates or completion.
+
+## Getting Help
+
+If you have questions about translating specific terms or phrases:
+
+1. Check existing translations in other languages for guidance
+2. Create an issue on GitHub to discuss with the community
+3. Reference the [English translation file](https://github.com/wg-easy/wg-easy/blob/master/src/i18n/locales/en.json) for context
+
+## Thank You
+
+Translations make WireGuard Easy accessible to users worldwide. Your contribution helps the global community!

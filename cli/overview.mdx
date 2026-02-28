@@ -1,0 +1,115 @@
+---
+title: CLI Overview
+description: Command-line interface for managing WireGuard Easy
+---
+
+The WireGuard Easy CLI provides a command-line interface for administrative tasks such as resetting the admin password and managing database operations.
+
+## Installation
+
+The CLI is bundled with WireGuard Easy and can be accessed through the Docker container.
+
+## Usage
+
+### Docker Compose
+
+If you're running WireGuard Easy with Docker Compose:
+
+```bash
+cd /etc/docker/containers/wg-easy
+docker compose exec -it wg-easy cli [command]
+```
+
+### Docker Run
+
+If you're running WireGuard Easy with Docker run:
+
+```bash
+docker run --rm -it \
+    -v ~/.wg-easy:/etc/wireguard \
+    ghcr.io/wg-easy/wg-easy:15 \
+    cli [command]
+```
+
+## Available Commands
+
+The CLI currently supports the following commands:
+
+### db:admin:reset
+
+Reset the admin user password and TOTP (two-factor authentication) settings.
+
+```bash
+cli db:admin:reset [--password <new_password>]
+```
+
+See the [admin-reset](/cli/admin-reset) page for detailed documentation.
+
+## Command Structure
+
+All CLI commands follow the pattern:
+
+```bash
+cli [command] [options]
+```
+
+Where:
+- `[command]` is the specific operation you want to perform
+- `[options]` are optional flags and arguments specific to each command
+
+## Getting Help
+
+To see all available commands and options:
+
+```bash
+cli --help
+```
+
+To get help for a specific command:
+
+```bash
+cli [command] --help
+```
+
+## Common Workflows
+
+### Emergency Admin Access
+
+If you've lost access to the admin account or need to reset two-factor authentication:
+
+1. Access the CLI through Docker
+2. Run the `db:admin:reset` command
+3. Set a new password (minimum 12 characters)
+4. TOTP settings will be automatically cleared
+
+```bash
+docker compose exec -it wg-easy cli db:admin:reset
+```
+
+### Scripted Password Reset
+
+For automated deployments or scripts, you can pass the password directly:
+
+```bash
+docker compose exec -it wg-easy cli db:admin:reset --password "YourSecurePassword123!"
+```
+
+<Warning>
+When passing passwords as command arguments, be aware that they may be visible in shell history and process lists. For production environments, consider using the interactive prompt instead.
+</Warning>
+
+## Requirements
+
+- Access to the WireGuard Easy Docker container
+- The WireGuard Easy database must be accessible at `/etc/wireguard/wg-easy.db`
+- Appropriate permissions to execute Docker commands
+
+## Version Information
+
+To check the CLI version:
+
+```bash
+cli --version
+```
+
+This will display the current version of WireGuard Easy and the CLI tool.

@@ -1,0 +1,563 @@
+---
+title: Two-Factor Authentication (2FA)
+description: Enable and manage TOTP-based two-factor authentication for enhanced account security
+---
+
+WireGuard Easy supports Time-based One-Time Password (TOTP) two-factor authentication to add an extra layer of security to user accounts.
+
+## Overview
+
+Two-factor authentication requires users to provide both their password and a time-based code from an authenticator app when logging in.
+
+### Benefits
+
+<CardGroup cols={2}>
+  <Card title="Enhanced Security" icon="shield-halved">
+    Protects against password compromise and unauthorized access
+  </Card>
+  <Card title="TOTP Standard" icon="clock">
+    Compatible with all standard authenticator apps
+  </Card>
+  <Card title="User Control" icon="user-shield">
+    Each user manages their own 2FA settings
+  </Card>
+  <Card title="Recovery Options" icon="key">
+    Can be disabled with password verification
+  </Card>
+</CardGroup>
+
+## Enabling 2FA
+
+Users can enable 2FA from their profile settings:
+
+<Steps>
+  <Step title="Navigate to Profile">
+    Click your user menu in the top right and select "My Profile" or navigate to `/me`.
+  </Step>
+  
+  <Step title="Locate 2FA Section">
+    Scroll down to the "Two-Factor Authentication" section.
+  </Step>
+  
+  <Step title="Click Enable 2FA">
+    Click the "Enable 2FA" button to begin the setup process.
+  </Step>
+  
+  <Step title="Scan QR Code">
+    A QR code appears on screen. Scan it with your authenticator app:
+    
+    **Recommended Apps**:
+    - Google Authenticator (iOS/Android)
+    - Microsoft Authenticator (iOS/Android)
+    - Authy (iOS/Android/Desktop)
+    - 1Password (iOS/Android/Desktop)
+    - Bitwarden (iOS/Android/Desktop)
+  </Step>
+  
+  <Step title="Save Backup Key">
+    Write down or securely store the displayed backup key. This allows manual entry if QR scanning fails.
+    
+    <Warning>
+    Store this key securely! It's needed for recovery if you lose access to your authenticator app.
+    </Warning>
+  </Step>
+  
+  <Step title="Enter Verification Code">
+    Enter the 6-digit code from your authenticator app to verify setup.
+  </Step>
+  
+  <Step title="Confirm Activation">
+    Click "Enable 2FA" to complete activation. Your account is now protected with two-factor authentication.
+  </Step>
+</Steps>
+
+<Info>
+After enabling 2FA, you'll be required to enter a code from your authenticator app every time you log in.
+</Info>
+
+## Setting Up Authenticator Apps
+
+Detailed setup instructions for popular authenticator apps:
+
+<Tabs>
+  <Tab title="Google Authenticator">
+    <Steps>
+      <Step title="Install the App">
+        Download Google Authenticator:
+        - iOS: [App Store](https://apps.apple.com/app/google-authenticator/id388497605)
+        - Android: [Google Play](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
+      </Step>
+      
+      <Step title="Open the App">
+        Launch Google Authenticator on your device.
+      </Step>
+      
+      <Step title="Add Account">
+        Tap the "+" button and select "Scan a QR code".
+      </Step>
+      
+      <Step title="Scan QR Code">
+        Point your camera at the QR code displayed in WireGuard Easy.
+      </Step>
+      
+      <Step title="Account Added">
+        The account appears with a 6-digit code that refreshes every 30 seconds.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Microsoft Authenticator">
+    <Steps>
+      <Step title="Install the App">
+        Download Microsoft Authenticator:
+        - iOS: [App Store](https://apps.apple.com/app/microsoft-authenticator/id983156458)
+        - Android: [Google Play](https://play.google.com/store/apps/details?id=com.azure.authenticator)
+      </Step>
+      
+      <Step title="Open the App">
+        Launch Microsoft Authenticator on your device.
+      </Step>
+      
+      <Step title="Add Account">
+        Tap "Add account" and select "Other (Google, Facebook, etc.)".
+      </Step>
+      
+      <Step title="Scan QR Code">
+        Tap "Scan a QR code" and point your camera at the screen.
+      </Step>
+      
+      <Step title="Name the Account">
+        Enter a descriptive name (e.g., "WireGuard VPN").
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Authy">
+    <Steps>
+      <Step title="Install the App">
+        Download Authy:
+        - iOS: [App Store](https://apps.apple.com/app/authy/id494168017)
+        - Android: [Google Play](https://play.google.com/store/apps/details?id=com.authy.authy)
+      </Step>
+      
+      <Step title="Create Authy Account">
+        Set up Authy with your phone number if this is your first time.
+      </Step>
+      
+      <Step title="Add Account">
+        Tap the "+" button in the bottom right.
+      </Step>
+      
+      <Step title="Scan QR Code">
+        Select "Scan QR Code" and scan the displayed code.
+      </Step>
+      
+      <Step title="Customize">
+        Optionally customize the logo and name for easy identification.
+      </Step>
+    </Steps>
+    
+    <Tip>
+    Authy supports cloud backup and multi-device sync, making it easier to recover access if you lose your device.
+    </Tip>
+  </Tab>
+  
+  <Tab title="Manual Entry">
+    If QR scanning doesn't work, manually enter the secret key:
+    
+    <Steps>
+      <Step title="Copy Secret Key">
+        Copy the alphanumeric secret key displayed below the QR code.
+      </Step>
+      
+      <Step title="Open Authenticator">
+        Open your authenticator app of choice.
+      </Step>
+      
+      <Step title="Select Manual Entry">
+        Choose "Enter a setup key" or "Manual entry" instead of scanning.
+      </Step>
+      
+      <Step title="Enter Details">
+        - **Account name**: WireGuard Easy (or your server name)
+        - **Key**: Paste the copied secret key
+        - **Time based**: Select TOTP (not HOTP)
+      </Step>
+      
+      <Step title="Save">
+        Save the account to start generating codes.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Logging In with 2FA
+
+Once 2FA is enabled, the login process requires an additional step:
+
+<Steps>
+  <Step title="Enter Credentials">
+    On the login page, enter your username and password as usual.
+  </Step>
+  
+  <Step title="Click Sign In">
+    Submit the login form.
+  </Step>
+  
+  <Step title="2FA Code Requested">
+    If credentials are correct, an additional field appears requesting the 2FA code.
+  </Step>
+  
+  <Step title="Open Authenticator App">
+    Open your authenticator app and locate the WireGuard Easy entry.
+  </Step>
+  
+  <Step title="Enter 6-Digit Code">
+    Type the current 6-digit code into the 2FA field.
+    
+    <Note>
+    The code refreshes every 30 seconds. If it's about to expire, wait for the new code to avoid timing issues.
+    </Note>
+  </Step>
+  
+  <Step title="Complete Login">
+    Click "Sign In" again to complete authentication and access the interface.
+  </Step>
+</Steps>
+
+### Remember Me Option
+
+The "Remember Me" checkbox on the login page:
+
+- Extends session duration
+- Still requires 2FA code on first login
+- Reduces frequency of re-authentication
+- Device-specific (doesn't affect other devices)
+
+<Info>
+Even with "Remember Me" enabled, 2FA is required for the initial login. Subsequent logins on the same device may not require a code until the session expires.
+</Info>
+
+## Disabling 2FA
+
+Users can disable two-factor authentication from their profile:
+
+<Steps>
+  <Step title="Navigate to Profile">
+    Go to your user profile at `/me`.
+  </Step>
+  
+  <Step title="Locate 2FA Section">
+    Scroll to the "Two-Factor Authentication" section.
+  </Step>
+  
+  <Step title="Enter Current Password">
+    For security, you must verify your identity by entering your current password.
+  </Step>
+  
+  <Step title="Click Disable 2FA">
+    Click the "Disable 2FA" button.
+  </Step>
+  
+  <Step title="Confirm Deactivation">
+    Confirm the action. Your account returns to password-only authentication.
+  </Step>
+</Steps>
+
+<Warning>
+Disabling 2FA reduces your account security. Only disable if absolutely necessary, and consider re-enabling as soon as possible.
+</Warning>
+
+## Troubleshooting 2FA
+
+### Code Not Accepted
+
+<AccordionGroup>
+  <Accordion title="Time Synchronization Issues">
+    **Problem**: TOTP codes are time-sensitive. Clock drift causes invalid codes.
+    
+    **Solution**:
+    - Ensure your device time is set to automatic
+    - Verify the server time is correct
+    - Check timezone settings on both devices
+    - Use NTP to synchronize server clock
+    
+    **Test**:
+    ```bash
+    # On server, check time:
+    date
+    
+    # Enable NTP synchronization:
+    sudo timedatectl set-ntp true
+    ```
+  </Accordion>
+  
+  <Accordion title="Code Already Used">
+    **Problem**: Each code can only be used once.
+    
+    **Solution**:
+    - Wait for the next code (codes refresh every 30 seconds)
+    - Don't submit the same code multiple times
+    - Ensure browser/app isn't auto-retrying
+  </Accordion>
+  
+  <Accordion title="Wrong Account">
+    **Problem**: Using code from a different account or service.
+    
+    **Solution**:
+    - Verify you're using the correct entry in your authenticator app
+    - Check the account name matches your WireGuard Easy server
+    - Delete and re-setup if you have duplicate entries
+  </Accordion>
+  
+  <Accordion title="QR Code Setup Failed">
+    **Problem**: QR code scan didn't properly register.
+    
+    **Solution**:
+    - Disable and re-enable 2FA to get a new QR code
+    - Try manual entry with the secret key
+    - Use a different authenticator app
+    - Check for app updates
+  </Accordion>
+</AccordionGroup>
+
+### Lost Access to Authenticator
+
+**Scenarios and Solutions**:
+
+<Tabs>
+  <Tab title="Device Lost or Broken">
+    **If you have backup codes**:
+    - Use the backup code to log in
+    - Disable 2FA
+    - Re-enable with a new device
+    
+    **If you don't have backup codes**:
+    - Contact your administrator
+    - Admin can disable 2FA for your account
+    - Re-enable 2FA after regaining access
+  </Tab>
+  
+  <Tab title="App Uninstalled">
+    **If you have cloud backup (Authy, etc.)**:
+    - Reinstall the authenticator app
+    - Restore from cloud backup
+    - Your accounts return automatically
+    
+    **If no backup**:
+    - Request admin assistance
+    - Have admin disable 2FA
+    - Set up 2FA again on new app
+  </Tab>
+  
+  <Tab title="New Phone">
+    **Before switching phones**:
+    1. Install authenticator on new phone
+    2. Transfer accounts:
+       - Authy: Cloud sync
+       - Google Authenticator: Export/import
+       - 1Password: Sync across devices
+    3. Verify codes work on new device
+    4. Decommission old device
+    
+    **After switching (forgot to transfer)**:
+    - Contact administrator for 2FA reset
+    - Re-enable with new device
+  </Tab>
+</Tabs>
+
+<Tip>
+**Prevent Lockout**: Before your device becomes unavailable, either export your authenticator accounts, enable cloud backup, or securely store backup codes.
+</Tip>
+
+### Admin: Resetting User 2FA
+
+Administrators can disable 2FA for locked-out users:
+
+<Warning>
+This feature is typically accessed through direct database manipulation or a future admin interface. Proceed with caution and verify user identity before resetting 2FA.
+</Warning>
+
+## Security Best Practices
+
+### Choosing an Authenticator
+
+<CardGroup cols={2}>
+  <Card title="Cloud Backup" icon="cloud">
+    **Apps**: Authy, 1Password, Bitwarden
+    
+    **Pros**: Recovery if device is lost
+    
+    **Cons**: Depends on provider security
+  </Card>
+  
+  <Card title="Local Only" icon="mobile">
+    **Apps**: Google Authenticator (without transfer)
+    
+    **Pros**: No cloud exposure
+    
+    **Cons**: Difficult recovery
+  </Card>
+  
+  <Card title="Multi-Device" icon="laptop-mobile">
+    **Apps**: 1Password, Bitwarden, Authy
+    
+    **Pros**: Access from multiple devices
+    
+    **Cons**: More devices to secure
+  </Card>
+  
+  <Card title="Encrypted Vault" icon="vault">
+    **Apps**: 1Password, Bitwarden
+    
+    **Pros**: Strong encryption, password protected
+    
+    **Cons**: Requires separate app subscription
+  </Card>
+</CardGroup>
+
+### Backup and Recovery
+
+<Steps>
+  <Step title="Save Backup Codes">
+    When enabling 2FA, securely store the displayed secret key:
+    - Write it down on paper
+    - Store in a password manager
+    - Keep in a safe or secure location
+    - Never store in plain text on devices
+  </Step>
+  
+  <Step title="Multiple Authenticators">
+    For critical access, set up the same account in multiple apps:
+    - Primary device authenticator
+    - Backup device authenticator
+    - Password manager with TOTP support
+  </Step>
+  
+  <Step title="Test Before Logging Out">
+    After enabling 2FA:
+    - Open an incognito/private window
+    - Test the login process
+    - Verify codes work
+    - Only close original session after confirming
+  </Step>
+  
+  <Step title="Regular Reviews">
+    Periodically verify your 2FA setup:
+    - Ensure authenticator app is up to date
+    - Test backup methods still work
+    - Update backup codes if you re-enable 2FA
+  </Step>
+</Steps>
+
+## Technical Details
+
+### TOTP Algorithm
+
+WireGuard Easy implements standard TOTP (RFC 6238):
+
+```yaml
+Algorithm: TOTP (Time-based One-Time Password)
+Hashing: HMAC-SHA1
+Code Length: 6 digits
+Time Step: 30 seconds
+Window: ±1 step (allows for clock drift)
+```
+
+### QR Code Format
+
+The generated QR code contains a TOTP URI:
+
+```
+otpauth://totp/WireGuardEasy:username?secret=SECRET&issuer=WireGuardEasy
+```
+
+**Components**:
+- `otpauth://totp/`: Protocol and type
+- `WireGuardEasy`: Issuer name
+- `username`: User identifier
+- `secret=SECRET`: Base32-encoded secret key
+- `issuer=WireGuardEasy`: Issuer parameter
+
+### API Endpoints
+
+**Setup 2FA**:
+```http
+POST /api/me/totp
+Content-Type: application/json
+
+{
+  "type": "setup"
+}
+
+Response:
+{
+  "type": "setup",
+  "uri": "otpauth://totp/...",
+  "key": "BASE32SECRET"
+}
+```
+
+**Enable 2FA**:
+```http
+POST /api/me/totp
+Content-Type: application/json
+
+{
+  "type": "create",
+  "code": "123456"
+}
+
+Response:
+{
+  "type": "created",
+  "success": true
+}
+```
+
+**Disable 2FA**:
+```http
+POST /api/me/totp
+Content-Type: application/json
+
+{
+  "type": "delete",
+  "currentPassword": "password123"
+}
+
+Response:
+{
+  "type": "deleted",
+  "success": true
+}
+```
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can I use SMS instead of an app?">
+    No, WireGuard Easy only supports TOTP-based authentication through authenticator apps. SMS 2FA is considered less secure and is not implemented.
+  </Accordion>
+  
+  <Accordion title="Do all users need to enable 2FA?">
+    2FA is optional for each user. Administrators can encourage or require it through policy, but the system doesn't enforce it by default.
+  </Accordion>
+  
+  <Accordion title="What happens if I change my password?">
+    Changing your password does not affect your 2FA setup. The same authenticator codes continue to work.
+  </Accordion>
+  
+  <Accordion title="Can I have multiple devices with the same 2FA?">
+    Yes! You can scan the QR code with multiple authenticator apps during initial setup. All apps generate the same valid codes.
+  </Accordion>
+  
+  <Accordion title="How secure is TOTP compared to other methods?">
+    TOTP is more secure than SMS 2FA and provides strong protection against:
+    - Password-only attacks
+    - Phishing (unless attacker performs real-time MITM)
+    - Credential stuffing
+    - Brute force attempts
+    
+    Hardware keys (FIDO2/WebAuthn) are more secure but less convenient.
+  </Accordion>
+</AccordionGroup>

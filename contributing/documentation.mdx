@@ -1,0 +1,288 @@
+---
+title: Documentation Guide
+description: Learn how to contribute to WireGuard Easy documentation
+---
+
+Good documentation is essential for helping users get the most out of WireGuard Easy. Whether you're fixing a typo, clarifying instructions, or adding new guides, your contributions are welcome.
+
+## Documentation Structure
+
+The documentation is located in the `docs/` directory and is built using MkDocs Material. The source files are written in Markdown.
+
+### Key Directories
+
+- `docs/content/` - Documentation content in Markdown format
+- `docs/mkdocs.yml` - MkDocs configuration file
+- `docs/overrides/` - Custom theme overrides
+
+## Quick Edits on GitHub
+
+For small changes like fixing typos or updating a single page:
+
+<Steps>
+  <Step title="Select Edge Version">
+    Make sure to select `edge` in the version dropdown menu at the top of the documentation site.
+  </Step>
+
+  <Step title="Navigate to the Page">
+    Navigate to the page you would like to edit.
+  </Step>
+
+  <Step title="Click Edit Button">
+    Click the edit button (pencil icon) in the top right corner of the page.
+  </Step>
+
+  <Step title="Make Your Changes">
+    Edit the content directly on GitHub using the web editor.
+  </Step>
+
+  <Step title="Create Pull Request">
+    Commit your changes and create a pull request with a clear description of what you changed and why.
+  </Step>
+</Steps>
+
+## Local Development
+
+For more substantial changes or to preview your work locally, you can run the documentation site on your machine.
+
+### Prerequisites
+
+- Docker installed on your system
+
+### Running the Documentation Server
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the repository if you haven't already:
+    
+    ```bash
+    git clone https://github.com/wg-easy/wg-easy.git
+    cd wg-easy
+    ```
+  </Step>
+
+  <Step title="Start Documentation Server">
+    Run the documentation preview server:
+    
+    ```bash
+    pnpm docs:preview
+    ```
+    
+    This runs `docker run --rm -it -p 8080:8080 -v ./docs:/docs squidfunk/mkdocs-material serve -a 0.0.0.0:8080`
+  </Step>
+
+  <Step title="Open in Browser">
+    Open your browser and navigate to:
+    
+    ```
+    http://localhost:8080
+    ```
+  </Step>
+
+  <Step title="Edit and Preview">
+    Edit the Markdown files in `docs/content/`. Each change will be hot-reloaded, so you can see your updates immediately in the browser.
+  </Step>
+</Steps>
+
+## Writing Guidelines
+
+### Markdown Formatting
+
+The documentation uses [MkDocs Material](https://squidfunk.github.io/mkdocs-material/), which supports:
+
+- Standard Markdown syntax
+- GitHub Flavored Markdown
+- Additional features like admonitions, tabs, and code blocks
+
+### Code Blocks
+
+Use fenced code blocks with language specification:
+
+```markdown
+```bash
+docker compose up -d
+```
+```
+
+### Admonitions
+
+Use admonitions for notes, warnings, and tips:
+
+```markdown
+/// note | Attention
+This is an important note.
+///
+
+/// warning
+This is a warning.
+///
+
+/// tip
+This is a helpful tip.
+///
+```
+
+### Links
+
+Use relative links for internal documentation:
+
+```markdown
+[Getting Started](../getting-started/index.md)
+```
+
+Use absolute URLs for external links:
+
+```markdown
+[WireGuard](https://www.wireguard.com/)
+```
+
+## Formatting Documentation
+
+The documentation files should follow consistent formatting. Check formatting with:
+
+```bash
+pnpm format:check:docs
+```
+
+This runs `prettier --check docs` to verify formatting.
+
+If there are formatting issues, Prettier will show them. The project uses Prettier for consistent code and documentation formatting.
+
+## Documentation Best Practices
+
+### Be Clear and Concise
+
+- Use simple language
+- Break complex topics into smaller sections
+- Provide examples where appropriate
+
+### Consider Your Audience
+
+- Assume users have basic technical knowledge
+- Explain technical terms when first introduced
+- Provide links to external resources for deeper dives
+
+### Use Examples
+
+- Include real-world examples
+- Show both the command and expected output
+- Explain what each example does
+
+### Keep It Updated
+
+- Ensure instructions match the current version
+- Update screenshots when UI changes
+- Remove outdated information
+
+### Structure Your Content
+
+- Use descriptive headings
+- Use bullet points for lists
+- Use numbered lists for sequential steps
+- Add a table of contents for long pages
+
+## Types of Documentation
+
+### Tutorials
+
+Step-by-step guides that help users accomplish a specific task. Should include:
+
+- Clear objectives
+- Prerequisites
+- Detailed steps
+- Expected outcomes
+- Troubleshooting tips
+
+### How-To Guides
+
+Practical guides focused on solving specific problems:
+
+- Address common use cases
+- Provide multiple approaches when applicable
+- Include examples and code snippets
+
+### Reference Documentation
+
+Detailed technical information:
+
+- Configuration options
+- API endpoints
+- Environment variables
+- Command-line options
+
+### Explanatory Content
+
+Concepts and background information:
+
+- Architecture overviews
+- Security considerations
+- Best practices
+
+## Contributing Documentation Changes
+
+<Steps>
+  <Step title="Create a Branch">
+    Create a new branch for your documentation changes:
+    
+    ```bash
+    git checkout -b docs/your-improvement
+    ```
+  </Step>
+
+  <Step title="Make Your Changes">
+    Edit the documentation files in `docs/content/`.
+  </Step>
+
+  <Step title="Preview Locally">
+    Test your changes using the local documentation server:
+    
+    ```bash
+    pnpm docs:preview
+    ```
+  </Step>
+
+  <Step title="Check Formatting">
+    Verify formatting is correct:
+    
+    ```bash
+    pnpm format:check:docs
+    ```
+  </Step>
+
+  <Step title="Commit and Push">
+    Commit your changes with a descriptive message:
+    
+    ```bash
+    git add docs/
+    git commit -m "docs: improve installation instructions"
+    git push origin docs/your-improvement
+    ```
+  </Step>
+
+  <Step title="Create Pull Request">
+    Create a pull request following the [PR workflow](/contributing/development#pull-request-workflow).
+  </Step>
+</Steps>
+
+## Documentation Review Process
+
+Documentation pull requests are reviewed for:
+
+- **Accuracy** - Information is correct and up-to-date
+- **Clarity** - Content is easy to understand
+- **Completeness** - No missing steps or information
+- **Formatting** - Follows Markdown conventions
+- **Grammar** - Proper spelling and grammar
+
+## Getting Help
+
+If you need help with documentation:
+
+- Check the [MkDocs Material documentation](https://squidfunk.github.io/mkdocs-material/)
+- Look at existing documentation pages for examples
+- Ask questions in a GitHub issue
+- Reference the [Markdown guide](https://www.markdownguide.org/)
+
+## Thank You
+
+Quality documentation makes WireGuard Easy more accessible to everyone. Your contributions help users around the world get started faster and solve problems more easily!

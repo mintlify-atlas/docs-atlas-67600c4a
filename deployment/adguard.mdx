@@ -1,0 +1,618 @@
+---
+title: AdGuard Home Integration
+description: Integrate WireGuard Easy with AdGuard Home for network-wide DNS ad-blocking and enhanced privacy protection for all VPN clients.
+---
+
+This guide shows you how to integrate WireGuard Easy with AdGuard Home to provide DNS-based ad-blocking, tracking protection, and custom DNS filtering for all your VPN clients.
+
+## Overview
+
+AdGuard Home is a network-wide software for blocking ads and tracking. When integrated with WireGuard Easy, all DNS queries from VPN clients are automatically routed through AdGuard Home, providing:
+
+- Network-wide ad blocking
+- Protection against tracking and phishing
+- Customizable DNS filtering rules
+- DNS query logging and statistics
+- Parental control features
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- A working WireGuard Easy installation
+- Docker and Docker Compose installed
+- Basic understanding of Docker networking
+- (Optional) A reverse proxy setup like Traefik or Caddy for web UI access
+
+## Architecture
+
+In this setup:
+
+1. WireGuard Easy and AdGuard Home run in separate Docker containers
+2. Both containers connect to a shared Docker network
+3. WireGuard clients are configured to use AdGuard Home as their DNS server
+4. iptables rules redirect all DNS traffic (port 53) to AdGuard Home
+5. AdGuard Home filters DNS queries and forwards clean requests upstream
+
+## Installation Steps
+
+<Steps>
+
+### Create AdGuard Home directory structure
+
+First, create the necessary directories for AdGuard Home configuration and data:
+
+```bash
+sudo mkdir -p /etc/docker/containers/adguard
+sudo mkdir -p /etc/docker/volumes/adguard/adguard_work
+sudo mkdir -p /etc/docker/volumes/adguard/adguard_conf
+sudo chmod -R 700 /etc/docker/volumes/adguard
+```
+
+### Create shared Docker network
+
+Create a dedicated network for WireGuard and AdGuard Home to communicate:
+
+```bash
+sudo docker network create wg
+```
+
+If you already have this network from previous setups, you can skip this step.
+
+### Configure AdGuard Home
+
+Create the Docker Compose file for AdGuard Home:
+
+**File: `/etc/docker/containers/adguard/docker-compose.yml`**
+
+```yaml
+services:
+  adguard:
+    image: adguard/adguardhome:latest
+    container_name: adguard
+    restart: unless-stopped
+    volumes:
+      - /etc/docker/volumes/adguard/adguard_work:/opt/adguardhome/work
+      - /etc/docker/volumes/adguard/adguard_conf:/opt/adguardhome/conf
+    networks:
+      wg:
+        ipv4_address: 10.42.42.43
+        ipv6_address: fdcc:ad94:bacf:61a3::2b
+
+networks:
+  wg:
+    external: true
+```
+
+<Note>
+The static IP addresses (10.42.42.43 for IPv4 and fdcc:ad94:bacf:61a3::2b for IPv6) are used by WireGuard clients for DNS resolution. These must match the network configuration in your WireGuard Easy setup.
+</Note>
+
+### Update WireGuard Easy configuration
+
+Modify your existing WireGuard Easy Docker Compose file to connect to the shared network and configure DNS settings.
+
+**File: `/etc/docker/containers/wg-easy/docker-compose.yml`**
+
+```yaml
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: unless-stopped
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.forwarding=1
+    volumes:
+      - /etc/docker/volumes/wg-easy:/etc/wireguard
+    networks:
+      wg:
+        ipv4_address: 10.42.42.2
+        ipv6_address: fdcc:ad94:bacf:61a3::2
+    environment:
+      # Web UI Configuration
+      - WG_HOST=your-domain.com
+      - PASSWORD=your-secure-password
+      
+      # DNS Configuration - Point to AdGuard Home
+      - WG_DEFAULT_DNS=10.42.42.43,fdcc:ad94:bacf:61a3::2b
+      
+      # Network Configuration
+      - WG_ALLOWED_IPS=0.0.0.0/0,::/0
+      - WG_PORT=51820
+
+networks:
+  wg:
+    external: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+```
+
+### Configure DNS traffic redirection
+
+Access the WireGuard Easy web interface and navigate to **Admin → Hooks**. Configure the following hooks to redirect all DNS traffic to AdGuard Home:
+
+**PostUp Hook:**
+
+```bash
+iptables -A INPUT -p udp -m udp --dport {{port}} -j ACCEPT; ip6tables -A INPUT -p udp -m udp --dport {{port}} -j ACCEPT; iptables -t nat -A PREROUTING -i wg0 -p udp --dport 53 -j DNAT --to-destination 10.42.42.43; iptables -t nat -A PREROUTING -i wg0 -p tcp --dport 53 -j DNAT --to-destination 10.42.42.43; ip6tables -t nat -A PREROUTING -i wg0 -p udp --dport 53 -j DNAT --to-destination fdcc:ad94:bacf:61a3::2b; ip6tables -t nat -A PREROUTING -i wg0 -p tcp --dport 53 -j DNAT --to-destination fdcc:ad94:bacf:61a3::2b; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; ip6tables -A FORWARD -i wg0 -j ACCEPT; ip6tables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s {{ipv4Cidr}} -o {{device}} -j MASQUERADE; ip6tables -t nat -A POSTROUTING -s {{ipv6Cidr}} -o {{device}} -j MASQUERADE;
+```
+
+**PostDown Hook:**
+
+```bash
+iptables -D INPUT -p udp -m udp --dport {{port}} -j ACCEPT || true; ip6tables -D INPUT -p udp -m udp --dport {{port}} -j ACCEPT || true; iptables -t nat -D PREROUTING -i wg0 -p udp --dport 53 -j DNAT --to-destination 10.42.42.43 || true; iptables -t nat -D PREROUTING -i wg0 -p tcp --dport 53 -j DNAT --to-destination 10.42.42.43 || true; ip6tables -t nat -D PREROUTING -i wg0 -p udp --dport 53 -j DNAT --to-destination fdcc:ad94:bacf:61a3::2b || true; ip6tables -t nat -D PREROUTING -i wg0 -p tcp --dport 53 -j DNAT --to-destination fdcc:ad94:bacf:61a3::2b || true; iptables -D FORWARD -i wg0 -j ACCEPT || true; iptables -D FORWARD -o wg0 -j ACCEPT || true; ip6tables -D FORWARD -i wg0 -j ACCEPT || true; ip6tables -D FORWARD -o wg0 -j ACCEPT || true; iptables -t nat -D POSTROUTING -s {{ipv4Cidr}} -o {{device}} -j MASQUERADE || true; ip6tables -t nat -D POSTROUTING -s {{ipv6Cidr}} -o {{device}} -j MASQUERADE || true;
+```
+
+<Warning>
+These hooks will redirect ALL DNS traffic from VPN clients to AdGuard Home, regardless of what DNS server they specify. This ensures consistent ad-blocking across all devices.
+</Warning>
+
+### Deploy the services
+
+Start both services:
+
+```bash
+# Start AdGuard Home
+cd /etc/docker/containers/adguard
+sudo docker compose up -d
+
+# Restart WireGuard Easy to apply changes
+cd /etc/docker/containers/wg-easy
+sudo docker compose down
+sudo docker compose up -d
+```
+
+### Configure AdGuard Home
+
+Access the AdGuard Home setup wizard:
+
+1. Navigate to `http://<your-server-ip>:3000` (or through your reverse proxy)
+2. Complete the initial setup wizard
+3. When prompted for the admin interface port, keep it at **3000** (or adjust your docker-compose.yml accordingly)
+4. Set a strong admin password
+5. Choose your upstream DNS servers (e.g., Cloudflare, Google, or custom)
+
+</Steps>
+
+## Network Configuration Details
+
+### IP Addressing
+
+The setup uses the following IP addressing scheme:
+
+| Service | IPv4 Address | IPv6 Address |
+|---------|--------------|---------------|
+| WireGuard Easy | 10.42.42.2 | fdcc:ad94:bacf:61a3::2 |
+| AdGuard Home | 10.42.42.43 | fdcc:ad94:bacf:61a3::2b |
+| VPN Network | 10.42.42.0/24 | fdcc:ad94:bacf:61a3::/64 |
+
+### DNS Traffic Flow
+
+1. **Client → WireGuard**: VPN client makes DNS query
+2. **WireGuard → iptables**: Traffic enters wg0 interface, matches DNAT rule
+3. **iptables → AdGuard**: DNS traffic redirected to AdGuard Home (10.42.42.43)
+4. **AdGuard → Upstream**: AdGuard filters query and forwards to upstream DNS
+5. **Response path**: Reverse of above, with filtered content
+
+## Verification
+
+### Test DNS resolution
+
+From a connected VPN client, test DNS resolution:
+
+```bash
+# Test basic DNS resolution
+nslookup google.com
+
+# Test ad-blocking (should fail or return blocked response)
+nslookup ads.google.com
+```
+
+### Check AdGuard Home logs
+
+In the AdGuard Home web interface:
+
+1. Navigate to **Query Log**
+2. You should see DNS queries from your VPN clients
+3. Blocked queries will be marked with a red icon
+
+### Verify container connectivity
+
+```bash
+# Check if containers are on the same network
+sudo docker network inspect wg
+
+# Test connectivity from WireGuard to AdGuard
+sudo docker exec wg-easy ping -c 3 10.42.42.43
+```
+
+## Optimization
+
+### Increase UDP buffer sizes
+
+For better DNS performance under load, increase UDP buffer sizes:
+
+**File: `/etc/sysctl.d/99-adguard.conf`**
+
+```bash
+net.core.rmem_max = 7500000
+net.core.wmem_max = 7500000
+```
+
+Apply the changes:
+
+```bash
+sudo sysctl --system
+```
+
+### AdGuard Home settings
+
+In the AdGuard Home interface, optimize these settings:
+
+1. **Settings → DNS settings**:
+   - Enable "Use DNSSEC"
+   - Enable "Parallel queries"
+   - Set "Rate limit" to appropriate value (e.g., 20)
+
+2. **Filters → DNS blocklists**:
+   - Enable standard AdGuard DNS filter
+   - Add additional blocklists as needed
+   - Keep the lists updated automatically
+
+## Reverse Proxy Integration
+
+### With Traefik
+
+Add these labels to your AdGuard Home service:
+
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.adguard.rule=Host(`adguard.example.com`)"
+  - "traefik.http.routers.adguard.entrypoints=websecure"
+  - "traefik.http.routers.adguard.service=adguard"
+  - "traefik.http.services.adguard.loadbalancer.server.port=3000"
+  - "traefik.docker.network=traefik"
+
+networks:
+  wg:
+    # ... existing wg network config
+  traefik:
+    external: true
+```
+
+### With Caddy
+
+Add to your Caddyfile:
+
+```caddy
+adguard.example.com {
+    reverse_proxy adguard:3000
+}
+```
+
+## Troubleshooting
+
+### DNS queries not being blocked
+
+**Issue**: Ads still appear despite AdGuard Home running.
+
+**Solutions**:
+
+1. Verify DNS traffic is reaching AdGuard Home:
+   ```bash
+   sudo docker logs adguard | grep -i query
+   ```
+
+2. Check iptables rules are applied:
+   ```bash
+   sudo docker exec wg-easy iptables -t nat -L PREROUTING -n -v | grep 53
+   ```
+
+3. Ensure VPN client is using correct DNS:
+   - Check WireGuard client configuration file
+   - DNS should be set to `10.42.42.43, fdcc:ad94:bacf:61a3::2b`
+
+4. Verify AdGuard Home filters are enabled:
+   - Open AdGuard Home UI
+   - Go to **Filters → DNS blocklists**
+   - Ensure filters are enabled and up to date
+
+### Cannot access AdGuard Home web interface
+
+**Issue**: Cannot connect to AdGuard Home UI.
+
+**Solutions**:
+
+1. Check container is running:
+   ```bash
+   sudo docker ps | grep adguard
+   ```
+
+2. Verify port binding:
+   ```bash
+   sudo docker port adguard
+   ```
+
+3. Check container logs:
+   ```bash
+   sudo docker logs adguard
+   ```
+
+4. Test local connectivity:
+   ```bash
+   curl http://10.42.42.43:3000
+   ```
+
+### DNS resolution extremely slow
+
+**Issue**: DNS queries take several seconds to resolve.
+
+**Solutions**:
+
+1. Check AdGuard Home upstream DNS servers:
+   - Avoid using too many upstream servers
+   - Choose geographically close servers
+   - Consider using `1.1.1.1` or `8.8.8.8`
+
+2. Increase cache size in AdGuard Home:
+   - Go to **Settings → DNS settings**
+   - Increase "Cache size" (default is 4MB)
+
+3. Apply UDP buffer optimizations (see Optimization section)
+
+4. Check for DNS loops:
+   ```bash
+   sudo docker exec adguard cat /opt/adguardhome/conf/AdGuardHome.yaml | grep upstream
+   ```
+
+### VPN clients can't reach internet
+
+**Issue**: Connected to VPN but no internet access.
+
+**Solutions**:
+
+1. Verify IP forwarding is enabled:
+   ```bash
+   sudo docker exec wg-easy sysctl net.ipv4.ip_forward
+   # Should return: net.ipv4.ip_forward = 1
+   ```
+
+2. Check MASQUERADE rules:
+   ```bash
+   sudo docker exec wg-easy iptables -t nat -L POSTROUTING -n -v
+   ```
+
+3. Verify WireGuard interface is up:
+   ```bash
+   sudo docker exec wg-easy wg show
+   ```
+
+4. Test connectivity from within container:
+   ```bash
+   sudo docker exec wg-easy ping -c 3 8.8.8.8
+   ```
+
+### AdGuard Home container keeps restarting
+
+**Issue**: AdGuard Home container won't stay running.
+
+**Solutions**:
+
+1. Check container logs:
+   ```bash
+   sudo docker logs adguard --tail 100
+   ```
+
+2. Verify volume permissions:
+   ```bash
+   ls -la /etc/docker/volumes/adguard/
+   sudo chmod -R 700 /etc/docker/volumes/adguard/
+   ```
+
+3. Check for port conflicts:
+   ```bash
+   sudo netstat -tulpn | grep :53
+   sudo netstat -tulpn | grep :3000
+   ```
+
+4. Verify network configuration:
+   ```bash
+   sudo docker network inspect wg
+   ```
+
+### IPv6 not working
+
+**Issue**: IPv4 works but IPv6 DNS queries fail.
+
+**Solutions**:
+
+1. Verify IPv6 is enabled on host:
+   ```bash
+   sudo sysctl net.ipv6.conf.all.disable_ipv6
+   # Should return: net.ipv6.conf.all.disable_ipv6 = 0
+   ```
+
+2. Check IPv6 forwarding:
+   ```bash
+   sudo sysctl net.ipv6.conf.all.forwarding
+   # Should return: net.ipv6.conf.all.forwarding = 1
+   ```
+
+3. Verify ip6tables rules:
+   ```bash
+   sudo docker exec wg-easy ip6tables -t nat -L PREROUTING -n -v
+   ```
+
+4. Test IPv6 connectivity:
+   ```bash
+   sudo docker exec wg-easy ping6 -c 3 fdcc:ad94:bacf:61a3::2b
+   ```
+
+## Advanced Configuration
+
+### Custom DNS rewrites
+
+You can configure custom DNS entries for local services:
+
+1. In AdGuard Home, go to **Filters → DNS rewrites**
+2. Add custom entries, for example:
+   - `server.local` → `192.168.1.100`
+   - `*.homelab.local` → `192.168.1.50`
+
+### Parental controls
+
+Enable content filtering for specific clients:
+
+1. Go to **Settings → Parental control**
+2. Enable parental control
+3. Configure blocked services and content categories
+
+### Per-client settings
+
+Create different filtering rules for different VPN clients:
+
+1. Go to **Settings → Client settings**
+2. Add client by IP address (from VPN subnet)
+3. Configure custom filtering rules, upstream DNS, or schedules
+
+### HTTPS/TLS for DNS
+
+Configure DNS-over-HTTPS or DNS-over-TLS:
+
+1. Go to **Settings → Encryption settings**
+2. Upload SSL certificates (or use Let's Encrypt)
+3. Enable DNS-over-HTTPS and/or DNS-over-TLS
+4. Update VPN client configurations to use secure DNS
+
+## Complete Docker Compose Example
+
+Here's a complete example combining WireGuard Easy, AdGuard Home, and Traefik:
+
+```yaml
+# File: /etc/docker/containers/vpn-stack/docker-compose.yml
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: unless-stopped
+    ports:
+      - "51820:51820/udp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.forwarding=1
+    volumes:
+      - ./wg-easy:/etc/wireguard
+    networks:
+      wg:
+        ipv4_address: 10.42.42.2
+        ipv6_address: fdcc:ad94:bacf:61a3::2
+      traefik:
+    environment:
+      - WG_HOST=vpn.example.com
+      - PASSWORD=your-secure-password
+      - WG_DEFAULT_DNS=10.42.42.43,fdcc:ad94:bacf:61a3::2b
+      - WG_ALLOWED_IPS=0.0.0.0/0,::/0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wg-easy.rule=Host(`vpn.example.com`)"
+      - "traefik.http.routers.wg-easy.entrypoints=websecure"
+      - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
+      - "traefik.docker.network=traefik"
+
+  adguard:
+    image: adguard/adguardhome:latest
+    container_name: adguard
+    restart: unless-stopped
+    volumes:
+      - ./adguard/work:/opt/adguardhome/work
+      - ./adguard/conf:/opt/adguardhome/conf
+    networks:
+      wg:
+        ipv4_address: 10.42.42.43
+        ipv6_address: fdcc:ad94:bacf:61a3::2b
+      traefik:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adguard.rule=Host(`adguard.example.com`)"
+      - "traefik.http.routers.adguard.entrypoints=websecure"
+      - "traefik.http.services.adguard.loadbalancer.server.port=3000"
+      - "traefik.docker.network=traefik"
+
+networks:
+  wg:
+    name: wg
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+  traefik:
+    external: true
+```
+
+## Security Considerations
+
+1. **Firewall rules**: Only expose necessary ports (51820/udp for WireGuard)
+2. **Strong passwords**: Use strong, unique passwords for both services
+3. **Regular updates**: Keep both WireGuard Easy and AdGuard Home updated
+4. **HTTPS access**: Always use HTTPS for web interfaces (via reverse proxy)
+5. **Rate limiting**: Enable rate limiting in AdGuard Home to prevent DNS abuse
+6. **Query logging**: Be mindful of privacy - configure appropriate log retention
+
+## Maintenance
+
+### Update containers
+
+```bash
+cd /etc/docker/containers/adguard
+sudo docker compose pull
+sudo docker compose up -d
+
+cd /etc/docker/containers/wg-easy
+sudo docker compose pull
+sudo docker compose up -d
+```
+
+### Backup configuration
+
+```bash
+# Backup AdGuard Home configuration
+sudo tar -czf adguard-backup-$(date +%Y%m%d).tar.gz /etc/docker/volumes/adguard/
+
+# Backup WireGuard configuration
+sudo tar -czf wg-easy-backup-$(date +%Y%m%d).tar.gz /etc/docker/volumes/wg-easy/
+```
+
+### Monitor performance
+
+```bash
+# Check container resource usage
+sudo docker stats wg-easy adguard
+
+# Check AdGuard Home query statistics
+# Access via web interface: Statistics page
+```
+
+## Additional Resources
+
+- [AdGuard Home Documentation](https://github.com/AdguardTeam/AdGuardHome/wiki)
+- [WireGuard Easy Documentation](https://github.com/wg-easy/wg-easy)
+- [Docker Networking Guide](https://docs.docker.com/network/)
+- [iptables Tutorial](https://www.netfilter.org/documentation/)

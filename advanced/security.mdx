@@ -1,0 +1,663 @@
+---
+title: Security & Authentication
+description: Secure your WireGuard Easy deployment with 2FA, authentication best practices, and security hardening
+---
+
+## Overview
+
+Security is critical for any VPN deployment. WireGuard Easy provides multiple layers of security including password authentication, two-factor authentication (2FA), and various hardening options.
+
+<Warning>
+  WireGuard Easy should never be exposed to the internet without proper authentication and security measures in place.
+</Warning>
+
+---
+
+## Authentication
+
+### Password Authentication
+
+All users must authenticate with a username and password to access the WireGuard Easy web interface and API.
+
+#### Initial Setup
+
+During first-time setup, you'll create an admin account with:
+- Username
+- Password (minimum security requirements apply)
+- Optional display name and email
+
+#### Password Requirements
+
+While WireGuard Easy doesn't enforce strict password policies by default, follow these best practices:
+
+<AccordionGroup>
+  <Accordion title="Minimum Length">
+    Use passwords with at least 12 characters. Longer passwords are exponentially more secure.
+  </Accordion>
+  
+  <Accordion title="Complexity">
+    Include a mix of:
+    - Uppercase letters (A-Z)
+    - Lowercase letters (a-z)
+    - Numbers (0-9)
+    - Special characters (!@#$%^&*)
+  </Accordion>
+  
+  <Accordion title="Uniqueness">
+    Never reuse passwords from other services. Use a password manager to generate and store unique passwords.
+  </Accordion>
+  
+  <Accordion title="Regular Rotation">
+    Change passwords periodically, especially:
+    - After suspected compromise
+    - When team members leave
+    - Every 90 days for high-security environments
+  </Accordion>
+</AccordionGroup>
+
+#### Changing Your Password
+
+**Via Web Interface:**
+
+1. Click your username in the top-right corner
+2. Select **Account**
+3. Navigate to **Change Password**
+4. Enter current password and new password
+5. Click **Save**
+
+**Via API:**
+
+```bash
+curl -X POST https://example.com:51821/api/me/password \
+  -u admin:current-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "current-password",
+    "newPassword": "new-secure-password"
+  }'
+```
+
+---
+
+## Two-Factor Authentication (2FA)
+
+### Overview
+
+WireGuard Easy supports Time-based One-Time Password (TOTP) two-factor authentication for enhanced security. When enabled, you'll need both your password and a 6-digit code from an authenticator app to log in.
+
+<Note>
+  API access is currently incompatible with 2FA. If you enable 2FA, you won't be able to use Basic Authentication for API requests.
+</Note>
+
+### Supported Authenticator Apps
+
+- Google Authenticator (iOS, Android)
+- Microsoft Authenticator (iOS, Android)
+- Authy (iOS, Android, Desktop)
+- 1Password (iOS, Android, Desktop)
+- Bitwarden (iOS, Android, Desktop, Browser)
+- Any TOTP-compatible authenticator
+
+### Enabling 2FA
+
+<Steps>
+  <Step title="Access Account Settings">
+    Click your username in the top-right corner and select **Account**.
+  </Step>
+  
+  <Step title="Enable Two-Factor Authentication">
+    Toggle **Enable Two Factor Authentication** to ON.
+  </Step>
+  
+  <Step title="Scan QR Code">
+    A QR code will appear. Open your authenticator app and scan the QR code.
+    
+    <Tip>
+      If you can't scan the QR code, most apps allow manual entry using the displayed TOTP key.
+    </Tip>
+  </Step>
+  
+  <Step title="Verify Setup">
+    Enter the 6-digit code from your authenticator app to verify the setup.
+  </Step>
+  
+  <Step title="Save Recovery Codes">
+    Store the TOTP secret key in a secure location in case you lose access to your authenticator device.
+  </Step>
+</Steps>
+
+### Using 2FA
+
+Once enabled, the login flow changes:
+
+1. Enter username and password
+2. You'll be prompted for a TOTP code
+3. Open your authenticator app
+4. Enter the current 6-digit code
+5. Click **Login**
+
+<Warning>
+  TOTP codes expire every 30 seconds. If a code doesn't work, wait for the next code and try again.
+</Warning>
+
+### Disabling 2FA
+
+<Steps>
+  <Step title="Access Account Settings">
+    Navigate to your account settings page.
+  </Step>
+  
+  <Step title="Enter Current Password">
+    For security, you must verify your password to disable 2FA.
+  </Step>
+  
+  <Step title="Disable Two-Factor Authentication">
+    Click **Disable Two Factor Authentication**.
+  </Step>
+</Steps>
+
+**Via API:**
+
+```bash
+curl -X POST https://example.com:51821/api/me/totp \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "delete",
+    "currentPassword": "your-password"
+  }'
+```
+
+### 2FA Recovery
+
+If you lose access to your authenticator device:
+
+1. **If you have the secret key:** Set up 2FA again on a new device using the saved secret key
+2. **If you don't have the secret key:** You'll need to access the server directly:
+
+```bash
+# Connect to the WireGuard Easy container
+docker exec -it wg-easy sh
+
+# Access the database
+sqlite3 /etc/wireguard/db.sqlite
+
+# Disable 2FA for a user
+UPDATE users SET totp_verified = 0, totp_key = NULL WHERE username = 'admin';
+.exit
+
+# Restart the container
+docker restart wg-easy
+```
+
+---
+
+## Session Management
+
+### Session Timeout
+
+Configure how long users stay logged in:
+
+1. Navigate to **Admin** → **General**
+2. Set **Session Timeout** (in seconds)
+   - Default: 86400 seconds (24 hours)
+   - Recommended: 3600 seconds (1 hour) for high-security environments
+3. Click **Save**
+
+**Via API:**
+
+```bash
+curl -X POST https://example.com:51821/api/admin/general \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionTimeout": 3600
+  }'
+```
+
+### Remember Me
+
+During login, users can check "Remember Me" to create a persistent session that survives browser restarts. This extends the session timeout.
+
+<Warning>
+  "Remember Me" should only be used on trusted devices. Never use it on shared or public computers.
+</Warning>
+
+### Session Storage
+
+Sessions are stored server-side with encrypted cookies sent to the client. Sessions are automatically invalidated when:
+
+- The timeout period expires
+- The user logs out
+- The server restarts (optional, depending on session storage configuration)
+
+---
+
+## API Security
+
+### Basic Authentication
+
+The API uses HTTP Basic Authentication:
+
+```bash
+curl -u username:password https://example.com:51821/api/client
+```
+
+<Warning>
+  Always use HTTPS when accessing the API to prevent credentials from being transmitted in plain text.
+</Warning>
+
+### API with 2FA Disabled
+
+Currently, 2FA is incompatible with API access. If you need to use both:
+
+1. Create a separate user account for API access without 2FA
+2. Restrict this account's permissions
+3. Use a strong, unique password
+4. Consider IP allowlisting for this account
+
+### Securing API Endpoints
+
+Recommendations:
+
+<CardGroup cols={2}>
+  <Card title="Use HTTPS" icon="lock">
+    Always use TLS/SSL certificates. Never expose the API over HTTP.
+  </Card>
+  
+  <Card title="IP Allowlisting" icon="shield">
+    Restrict API access to known IP addresses using firewall rules.
+  </Card>
+  
+  <Card title="Rate Limiting" icon="gauge">
+    Implement rate limiting at the reverse proxy level to prevent brute force attacks.
+  </Card>
+  
+  <Card title="Audit Logging" icon="file-lines">
+    Enable and monitor logs for suspicious API activity.
+  </Card>
+</CardGroup>
+
+---
+
+## Network Security
+
+### Firewall Configuration
+
+Only expose necessary ports:
+
+```yaml docker-compose.yml
+ports:
+  - "51820:51820/udp"  # WireGuard VPN (required)
+  - "51821:51821/tcp"  # Web UI (restrict with firewall)
+```
+
+**Firewall rules (iptables):**
+
+```bash
+# Allow WireGuard VPN from anywhere
+iptables -A INPUT -p udp --dport 51820 -j ACCEPT
+
+# Allow web UI only from specific IP
+iptables -A INPUT -p tcp --dport 51821 -s 203.0.113.0/24 -j ACCEPT
+iptables -A INPUT -p tcp --dport 51821 -j DROP
+```
+
+**Firewall rules (ufw):**
+
+```bash
+# Allow WireGuard VPN
+ufw allow 51820/udp
+
+# Allow web UI only from specific IP
+ufw allow from 203.0.113.0/24 to any port 51821 proto tcp
+```
+
+### Reverse Proxy with Authentication
+
+Use a reverse proxy (Nginx, Caddy, Traefik) for additional security:
+
+**Nginx example with Basic Auth:**
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name wg.example.com;
+
+    ssl_certificate /etc/ssl/certs/wg.example.com.crt;
+    ssl_certificate_key /etc/ssl/private/wg.example.com.key;
+
+    # Additional authentication layer
+    auth_basic "WireGuard Easy";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://localhost:51821;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### VPN Tunnel Security
+
+WireGuard itself provides strong security, but follow these best practices:
+
+<AccordionGroup>
+  <Accordion title="Use Pre-Shared Keys">
+    Pre-shared keys add an additional layer of security with post-quantum resistance.
+    
+    WireGuard Easy generates pre-shared keys automatically for all clients.
+  </Accordion>
+  
+  <Accordion title="Regular Key Rotation">
+    Periodically delete and recreate client configurations to rotate keys.
+    
+    Consider rotating keys:
+    - Every 90 days for normal environments
+    - Every 30 days for high-security environments
+    - Immediately after suspected compromise
+  </Accordion>
+  
+  <Accordion title="Disable Unused Clients">
+    Instead of deleting clients, disable them first. This allows you to re-enable if needed.
+  </Accordion>
+  
+  <Accordion title="Set Client Expiration">
+    Use the expiration feature for temporary access.
+    
+    ```bash
+    curl -X POST https://example.com:51821/api/client \
+      -u admin:password \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Temporary Client",
+        "expiresAt": "2024-12-31T23:59:59Z"
+      }'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Metrics Security
+
+When exposing metrics endpoints (Prometheus), ensure they're secured:
+
+### Bearer Token Authentication
+
+1. Navigate to **Admin** → **General**
+2. Enable **Prometheus** metrics
+3. Set a strong **Metrics Password** (bearer token)
+4. Click **Save**
+
+**Accessing metrics:**
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  https://example.com:51821/metrics/prometheus
+```
+
+### Network Restrictions
+
+Restrict metrics endpoints to monitoring systems only:
+
+```bash
+# Only allow Prometheus server
+iptables -A INPUT -p tcp --dport 51821 -s 10.0.0.50 -j ACCEPT
+iptables -A INPUT -p tcp --dport 51821 -j DROP
+```
+
+See [Metrics documentation](/advanced/metrics) for more details.
+
+---
+
+## Docker Security
+
+### Minimal Capabilities
+
+WireGuard Easy requires certain Linux capabilities. Only grant what's necessary:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    cap_add:
+      - NET_ADMIN    # Required for network configuration
+      - SYS_MODULE   # Required to load WireGuard kernel module
+    cap_drop:
+      - ALL          # Drop all other capabilities
+```
+
+### Read-Only Root Filesystem
+
+Run with a read-only root filesystem where possible:
+
+```yaml
+services:
+  wg-easy:
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./config:/etc/wireguard  # Writable volume for config
+```
+
+### User Namespace Remapping
+
+Enable Docker user namespace remapping to reduce privilege escalation risks:
+
+```json /etc/docker/daemon.json
+{
+  "userns-remap": "default"
+}
+```
+
+### Security Scanning
+
+Regularly scan the WireGuard Easy image for vulnerabilities:
+
+```bash
+# Using Trivy
+trivy image ghcr.io/wg-easy/wg-easy:latest
+
+# Using Docker Scout
+docker scout cves ghcr.io/wg-easy/wg-easy:latest
+```
+
+---
+
+## Environment Variables Security
+
+### Sensitive Variables
+
+Never commit sensitive environment variables to version control:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    env_file:
+      - .env  # Store sensitive vars in .env (add to .gitignore)
+    environment:
+      - WG_HOST=${WG_HOST}
+      - PASSWORD=${ADMIN_PASSWORD}
+```
+
+**.env file:**
+
+```bash
+WG_HOST=vpn.example.com
+ADMIN_PASSWORD=super-secure-password-here
+```
+
+**.gitignore:**
+
+```
+.env
+.env.local
+.env.*.local
+```
+
+### Environment Variable Encryption
+
+For production, use secrets management:
+
+**Docker Swarm:**
+
+```yaml
+services:
+  wg-easy:
+    secrets:
+      - admin_password
+    environment:
+      - PASSWORD_FILE=/run/secrets/admin_password
+
+secrets:
+  admin_password:
+    external: true
+```
+
+**Kubernetes:**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wg-easy-secrets
+type: Opaque
+data:
+  password: <base64-encoded-password>
+```
+
+---
+
+## Audit Logging
+
+### Enable Logging
+
+Monitor all access and changes:
+
+```bash
+# View container logs
+docker logs -f wg-easy
+
+# Save logs to file
+docker logs wg-easy > wg-easy.log 2>&1
+```
+
+### Log Shipping
+
+Ship logs to a centralized logging system:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    logging:
+      driver: "syslog"
+      options:
+        syslog-address: "tcp://logserver:514"
+        tag: "wg-easy"
+```
+
+### Important Events to Monitor
+
+- Failed login attempts
+- Successful logins (especially from new IPs)
+- Client creation/deletion
+- Configuration changes
+- API access
+- 2FA enable/disable events
+
+---
+
+## Incident Response
+
+### Suspected Compromise
+
+If you suspect a security breach:
+
+<Steps>
+  <Step title="Immediately disable all clients">
+    ```bash
+    # Via API (requires scripting)
+    for id in $(seq 1 100); do
+      curl -X POST https://example.com:51821/api/client/$id/disable \
+        -u admin:password
+    done
+    ```
+  </Step>
+  
+  <Step title="Change all passwords">
+    Change admin password and force all users to update passwords.
+  </Step>
+  
+  <Step title="Rotate all WireGuard keys">
+    Delete and recreate all client configurations with new keys.
+  </Step>
+  
+  <Step title="Review logs">
+    Check logs for suspicious activity and unauthorized access.
+  </Step>
+  
+  <Step title="Update and patch">
+    Ensure WireGuard Easy is running the latest version.
+  </Step>
+  
+  <Step title="Re-enable clients selectively">
+    Only re-enable verified, trusted clients with new configurations.
+  </Step>
+</Steps>
+
+---
+
+## Security Checklist
+
+Use this checklist to ensure your deployment is secure:
+
+- [ ] Strong admin password (12+ characters, mixed case, numbers, symbols)
+- [ ] 2FA enabled for all admin accounts
+- [ ] HTTPS/TLS enabled (not HTTP)
+- [ ] Web UI access restricted by IP (not exposed to internet)
+- [ ] API access restricted or disabled
+- [ ] Firewall rules configured (only necessary ports open)
+- [ ] Pre-shared keys enabled for all clients
+- [ ] Client expiration dates set for temporary access
+- [ ] Unused clients disabled or deleted
+- [ ] Metrics endpoint secured with bearer token
+- [ ] Docker running with minimal capabilities
+- [ ] Environment variables stored securely (not in version control)
+- [ ] Audit logging enabled and monitored
+- [ ] Regular security updates applied
+- [ ] Backup and disaster recovery plan in place
+
+---
+
+## Best Practices Summary
+
+<CardGroup cols={2}>
+  <Card title="Defense in Depth" icon="shield-halved">
+    Use multiple layers of security: strong passwords, 2FA, network restrictions, and monitoring.
+  </Card>
+  
+  <Card title="Principle of Least Privilege" icon="user-lock">
+    Grant only the minimum necessary permissions to users, services, and processes.
+  </Card>
+  
+  <Card title="Regular Updates" icon="rotate">
+    Keep WireGuard Easy and dependencies up to date with security patches.
+  </Card>
+  
+  <Card title="Monitor and Audit" icon="eye">
+    Enable logging, review logs regularly, and set up alerts for suspicious activity.
+  </Card>
+</CardGroup>
+
+---
+
+## Related Documentation
+
+- [2FA User Guide](../guides/2fa) - Detailed 2FA setup instructions
+- [API Reference](/advanced/api) - Secure API usage
+- [Metrics & Monitoring](/advanced/metrics) - Secure metrics configuration
+- [Hooks](/advanced/hooks) - Security considerations for hooks

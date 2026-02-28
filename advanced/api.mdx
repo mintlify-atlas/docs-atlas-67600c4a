@@ -1,0 +1,991 @@
+---
+title: API Reference
+description: Complete REST API documentation for programmatic access to WireGuard Easy
+---
+
+## Overview
+
+The WireGuard Easy API provides programmatic access to manage your WireGuard server, clients, and configuration. All endpoints use REST principles with JSON request/response bodies.
+
+<Warning>
+  The API is currently in development and subject to change. Monitor release notes for breaking changes.
+</Warning>
+
+## Base URL
+
+All API endpoints are accessible at:
+
+```
+https://your-domain:51821/api
+```
+
+## Authentication
+
+The API uses HTTP Basic Authentication with your WireGuard Easy username and password.
+
+<Warning>
+  If 2FA (TOTP) is enabled on your account, API authentication will fail. Disable 2FA to use the API.
+</Warning>
+
+### Authentication Example
+
+<CodeGroup>
+```bash cURL
+curl -u username:password \
+  https://example.com:51821/api/client
+```
+
+```python Python
+import requests
+from requests.auth import HTTPBasicAuth
+
+url = "https://example.com:51821/api/client"
+response = requests.get(url, auth=HTTPBasicAuth('username', 'password'))
+
+if response.status_code == 200:
+    data = response.json()
+    print(data)
+else:
+    print(f"Error: {response.status_code}")
+```
+
+```javascript JavaScript
+const username = 'your-username';
+const password = 'your-password';
+const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+
+fetch('https://example.com:51821/api/client', {
+  headers: {
+    'Authorization': `Basic ${credentials}`
+  }
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+---
+
+## Session Management
+
+### Login
+
+Create a new session.
+
+```http
+POST /api/session
+```
+
+<ParamField body="username" type="string" required>
+  Username for authentication
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password for authentication
+</ParamField>
+
+<ParamField body="remember" type="boolean">
+  Whether to create a persistent session
+</ParamField>
+
+<ParamField body="totpCode" type="string">
+  TOTP code if 2FA is enabled
+</ParamField>
+
+<ResponseField name="status" type="string">
+  Login status: `success`, `TOTP_REQUIRED`, or `INVALID_TOTP_CODE`
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://example.com:51821/api/session \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "your-password",
+    "remember": true
+  }'
+```
+
+```json Response
+{
+  "status": "success"
+}
+```
+</CodeGroup>
+
+### Get Current Session
+
+Retrieve information about the current authenticated user.
+
+```http
+GET /api/session
+```
+
+<ResponseField name="id" type="number">
+  User ID
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Username
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  User role (e.g., `admin`, `user`)
+</ResponseField>
+
+<ResponseField name="totpVerified" type="boolean">
+  Whether TOTP 2FA is enabled and verified
+</ResponseField>
+
+### Logout
+
+Delete the current session.
+
+```http
+DELETE /api/session
+```
+
+<ResponseField name="success" type="boolean">
+  Whether the logout was successful
+</ResponseField>
+
+---
+
+## Client Management
+
+### List All Clients
+
+Retrieve all WireGuard clients. Admin users see all clients; regular users see only their own.
+
+```http
+GET /api/client
+```
+
+<ParamField query="filter" type="string">
+  Optional filter string to search clients by name
+</ParamField>
+
+<ResponseField name="clients" type="array">
+  Array of client objects
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -u admin:password \
+  "https://example.com:51821/api/client?filter=laptop"
+```
+
+```json Response
+[
+  {
+    "id": 1,
+    "clientId": "abc123",
+    "name": "John's Laptop",
+    "enabled": true,
+    "ipv4Address": "10.8.0.2",
+    "ipv6Address": "fd42:42:42::2",
+    "publicKey": "...",
+    "transferRx": 1048576,
+    "transferTx": 2097152,
+    "latestHandshakeAt": "2024-02-28T10:30:00Z",
+    "expiresAt": null,
+    "createdAt": "2024-02-01T10:00:00Z",
+    "updatedAt": "2024-02-28T10:30:00Z"
+  }
+]
+```
+</CodeGroup>
+
+### Get Client Details
+
+Retrieve detailed information about a specific client.
+
+```http
+GET /api/client/{clientId}
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+<ResponseField name="endpoint" type="string">
+  Current endpoint address if client is connected
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -u admin:password \
+  https://example.com:51821/api/client/1
+```
+
+```json Response
+{
+  "id": 1,
+  "clientId": "abc123",
+  "name": "John's Laptop",
+  "enabled": true,
+  "ipv4Address": "10.8.0.2",
+  "ipv6Address": "fd42:42:42::2",
+  "publicKey": "...",
+  "transferRx": 1048576,
+  "transferTx": 2097152,
+  "endpoint": "203.0.113.45:54321",
+  "latestHandshakeAt": "2024-02-28T10:30:00Z"
+}
+```
+</CodeGroup>
+
+### Create Client
+
+Create a new WireGuard client configuration.
+
+```http
+POST /api/client
+```
+
+<ParamField body="name" type="string" required>
+  Client name (must be unique)
+</ParamField>
+
+<ParamField body="expiresAt" type="string" nullable>
+  ISO 8601 timestamp when the client configuration expires
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the client was created successfully
+</ResponseField>
+
+<ResponseField name="clientId" type="string">
+  The unique identifier for the newly created client
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://example.com:51821/api/client \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "iPhone 14",
+    "expiresAt": "2024-12-31T23:59:59Z"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "clientId": "xyz789"
+}
+```
+</CodeGroup>
+
+### Update Client
+
+Update an existing client's configuration.
+
+```http
+POST /api/client/{clientId}
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+<ParamField body="name" type="string">
+  Client name
+</ParamField>
+
+<ParamField body="enabled" type="boolean">
+  Whether the client is enabled
+</ParamField>
+
+<ParamField body="expiresAt" type="string" nullable>
+  ISO 8601 timestamp for expiration
+</ParamField>
+
+<ParamField body="ipv4Address" type="string">
+  IPv4 address for the client
+</ParamField>
+
+<ParamField body="ipv6Address" type="string">
+  IPv6 address for the client
+</ParamField>
+
+<ParamField body="allowedIps" type="array" nullable>
+  Array of allowed IP addresses/subnets
+</ParamField>
+
+<ParamField body="serverAllowedIps" type="array">
+  Array of server-side allowed IPs
+</ParamField>
+
+<ParamField body="dns" type="string" nullable>
+  DNS servers for the client
+</ParamField>
+
+<ParamField body="mtu" type="number">
+  MTU value for the client
+</ParamField>
+
+<ParamField body="persistentKeepalive" type="number">
+  Persistent keepalive interval in seconds
+</ParamField>
+
+<ParamField body="serverEndpoint" type="string" nullable>
+  Custom server endpoint override
+</ParamField>
+
+<ParamField body="preUp" type="string">
+  PreUp hook command
+</ParamField>
+
+<ParamField body="postUp" type="string">
+  PostUp hook command
+</ParamField>
+
+<ParamField body="preDown" type="string">
+  PreDown hook command
+</ParamField>
+
+<ParamField body="postDown" type="string">
+  PostDown hook command
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+### Delete Client
+
+Delete a client configuration.
+
+```http
+DELETE /api/client/{clientId}
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://example.com:51821/api/client/1 \
+  -u admin:password
+```
+
+```json Response
+{
+  "success": true
+}
+```
+</CodeGroup>
+
+### Enable Client
+
+Enable a disabled client.
+
+```http
+POST /api/client/{clientId}/enable
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the client was enabled successfully
+</ResponseField>
+
+### Disable Client
+
+Disable an active client.
+
+```http
+POST /api/client/{clientId}/disable
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the client was disabled successfully
+</ResponseField>
+
+### Download Configuration
+
+Download the WireGuard configuration file for a client.
+
+```http
+GET /api/client/{clientId}/configuration
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+Returns a `.conf` file with `application/octet-stream` content type.
+
+<CodeGroup>
+```bash cURL
+curl -u admin:password \
+  -o client.conf \
+  https://example.com:51821/api/client/1/configuration
+```
+</CodeGroup>
+
+### Get QR Code
+
+Retrieve the configuration as an SVG QR code for easy mobile scanning.
+
+```http
+GET /api/client/{clientId}/qrcode.svg
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+Returns an SVG image with `image/svg+xml` content type.
+
+<CodeGroup>
+```bash cURL
+curl -u admin:password \
+  -o qrcode.svg \
+  https://example.com:51821/api/client/1/qrcode.svg
+```
+</CodeGroup>
+
+### Generate One-Time Link
+
+Generate a one-time access link for sharing the client configuration securely.
+
+```http
+POST /api/client/{clientId}/generateOneTimeLink
+```
+
+<ParamField path="clientId" type="number" required>
+  The unique client identifier
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the link was generated successfully
+</ResponseField>
+
+---
+
+## Admin Endpoints
+
+<Note>
+  All admin endpoints require administrator privileges.
+</Note>
+
+### Get General Configuration
+
+Retrieve general server configuration.
+
+```http
+GET /api/admin/general
+```
+
+<ResponseField name="sessionTimeout" type="number">
+  Session timeout in seconds
+</ResponseField>
+
+<ResponseField name="metricsPrometheus" type="boolean">
+  Whether Prometheus metrics are enabled
+</ResponseField>
+
+<ResponseField name="metricsJson" type="boolean">
+  Whether JSON metrics are enabled
+</ResponseField>
+
+<ResponseField name="metricsPassword" type="string" nullable>
+  Bearer token for metrics endpoints
+</ResponseField>
+
+### Update General Configuration
+
+Update general server configuration.
+
+```http
+POST /api/admin/general
+```
+
+<ParamField body="sessionTimeout" type="number">
+  Session timeout in seconds
+</ParamField>
+
+<ParamField body="metricsPrometheus" type="boolean">
+  Enable Prometheus metrics
+</ParamField>
+
+<ParamField body="metricsJson" type="boolean">
+  Enable JSON metrics
+</ParamField>
+
+<ParamField body="metricsPassword" type="string" nullable>
+  Bearer token for metrics authentication
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://example.com:51821/api/admin/general \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionTimeout": 86400,
+    "metricsPrometheus": true,
+    "metricsPassword": "SecureToken123"
+  }'
+```
+</CodeGroup>
+
+### Get Interface Configuration
+
+Retrieve WireGuard interface configuration.
+
+```http
+GET /api/admin/interface
+```
+
+<ResponseField name="name" type="string">
+  Interface name (e.g., `wg0`)
+</ResponseField>
+
+<ResponseField name="ipv4Cidr" type="string">
+  IPv4 CIDR range
+</ResponseField>
+
+<ResponseField name="ipv6Cidr" type="string">
+  IPv6 CIDR range
+</ResponseField>
+
+<ResponseField name="port" type="number">
+  WireGuard listening port
+</ResponseField>
+
+<ResponseField name="publicKey" type="string">
+  Server public key
+</ResponseField>
+
+<ResponseField name="mtu" type="number">
+  Interface MTU
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean">
+  Whether the interface is enabled
+</ResponseField>
+
+### Update Interface Configuration
+
+Update WireGuard interface settings.
+
+```http
+POST /api/admin/interface
+```
+
+<ParamField body="ipv4Cidr" type="string">
+  IPv4 CIDR range (must be valid CIDR)
+</ParamField>
+
+<ParamField body="ipv6Cidr" type="string">
+  IPv6 CIDR range (must be valid CIDR)
+</ParamField>
+
+<ParamField body="port" type="number">
+  WireGuard listening port
+</ParamField>
+
+<ParamField body="mtu" type="number">
+  Interface MTU
+</ParamField>
+
+<ParamField body="device" type="string">
+  Network device name
+</ParamField>
+
+<ParamField body="enabled" type="boolean">
+  Enable or disable the interface
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+### Update CIDR Ranges
+
+Update only the CIDR ranges for the interface.
+
+```http
+POST /api/admin/interface/cidr
+```
+
+<ParamField body="ipv4Cidr" type="string" required>
+  IPv4 CIDR range
+</ParamField>
+
+<ParamField body="ipv6Cidr" type="string" required>
+  IPv6 CIDR range
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+### Restart Interface
+
+Restart the WireGuard interface.
+
+```http
+POST /api/admin/interface/restart
+```
+
+<ResponseField name="success" type="boolean">
+  Whether the restart was successful
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://example.com:51821/api/admin/interface/restart \
+  -u admin:password
+```
+</CodeGroup>
+
+### Get Hooks Configuration
+
+Retrieve server-level hooks configuration.
+
+```http
+GET /api/admin/hooks
+```
+
+<ResponseField name="preUp" type="string">
+  PreUp hook command
+</ResponseField>
+
+<ResponseField name="postUp" type="string">
+  PostUp hook command
+</ResponseField>
+
+<ResponseField name="preDown" type="string">
+  PreDown hook command
+</ResponseField>
+
+<ResponseField name="postDown" type="string">
+  PostDown hook command
+</ResponseField>
+
+### Update Hooks Configuration
+
+Update server-level hooks.
+
+```http
+POST /api/admin/hooks
+```
+
+<ParamField body="preUp" type="string">
+  Command to run before bringing the interface up
+</ParamField>
+
+<ParamField body="postUp" type="string">
+  Command to run after bringing the interface up
+</ParamField>
+
+<ParamField body="preDown" type="string">
+  Command to run before bringing the interface down
+</ParamField>
+
+<ParamField body="postDown" type="string">
+  Command to run after bringing the interface down
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://example.com:51821/api/admin/hooks \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "postUp": "iptables -A FORWARD -i wg0 -j ACCEPT",
+    "postDown": "iptables -D FORWARD -i wg0 -j ACCEPT"
+  }'
+```
+</CodeGroup>
+
+### Get IP Information
+
+Retrieve server's public IP information.
+
+```http
+GET /api/admin/ip-info
+```
+
+Returns information about the server's public IP address, useful for automatic endpoint configuration.
+
+### Get User Configuration
+
+Retrieve user-specific configuration settings.
+
+```http
+GET /api/admin/userconfig
+```
+
+---
+
+## User Profile Endpoints
+
+### Update Profile
+
+Update the current user's profile information.
+
+```http
+POST /api/me
+```
+
+<ParamField body="name" type="string">
+  Display name
+</ParamField>
+
+<ParamField body="email" type="string">
+  Email address
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the update was successful
+</ResponseField>
+
+### Change Password
+
+Change the current user's password.
+
+```http
+POST /api/me/password
+```
+
+<ParamField body="currentPassword" type="string" required>
+  Current password for verification
+</ParamField>
+
+<ParamField body="newPassword" type="string" required>
+  New password
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the password was changed successfully
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://example.com:51821/api/me/password \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "old-password",
+    "newPassword": "new-secure-password"
+  }'
+```
+</CodeGroup>
+
+### Manage 2FA (TOTP)
+
+Manage Time-based One-Time Password (TOTP) two-factor authentication.
+
+```http
+POST /api/me/totp
+```
+
+#### Setup TOTP
+
+<ParamField body="type" type="string" required>
+  Set to `setup` to initialize TOTP
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether setup was successful
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Response type: `setup`
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  Base32-encoded TOTP secret key
+</ResponseField>
+
+<ResponseField name="uri" type="string">
+  TOTP URI for QR code generation
+</ResponseField>
+
+#### Enable TOTP
+
+<ParamField body="type" type="string" required>
+  Set to `create` to enable TOTP
+</ParamField>
+
+<ParamField body="code" type="string" required>
+  Current TOTP code to verify setup
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether TOTP was enabled successfully
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Response type: `created`
+</ResponseField>
+
+#### Disable TOTP
+
+<ParamField body="type" type="string" required>
+  Set to `delete` to disable TOTP
+</ParamField>
+
+<ParamField body="currentPassword" type="string" required>
+  Current password for verification
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether TOTP was disabled successfully
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Response type: `deleted`
+</ResponseField>
+
+<CodeGroup>
+```bash Setup TOTP
+curl -X POST https://example.com:51821/api/me/totp \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{"type": "setup"}'
+```
+
+```bash Enable TOTP
+curl -X POST https://example.com:51821/api/me/totp \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "create",
+    "code": "123456"
+  }'
+```
+
+```bash Disable TOTP
+curl -X POST https://example.com:51821/api/me/totp \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "delete",
+    "currentPassword": "your-password"
+  }'
+```
+</CodeGroup>
+
+---
+
+## System Information
+
+### Get System Information
+
+Retrieve system and version information.
+
+```http
+GET /api/information
+```
+
+<ResponseField name="currentRelease" type="string">
+  Current WireGuard Easy version
+</ResponseField>
+
+<ResponseField name="latestRelease" type="object">
+  Information about the latest available release
+</ResponseField>
+
+<ResponseField name="updateAvailable" type="boolean">
+  Whether an update is available
+</ResponseField>
+
+<ResponseField name="insecure" type="boolean">
+  Whether running in insecure mode
+</ResponseField>
+
+<ResponseField name="isAwg" type="boolean">
+  Whether using AmneziaWG implementation
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -u admin:password \
+  https://example.com:51821/api/information
+```
+
+```json Response
+{
+  "currentRelease": "15.0.0",
+  "latestRelease": {
+    "version": "15.1.0",
+    "url": "https://github.com/wg-easy/wg-easy/releases/tag/15.1.0"
+  },
+  "updateAvailable": true,
+  "insecure": false,
+  "isAwg": false
+}
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All endpoints return standard HTTP status codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request - Invalid parameters |
+| 401 | Unauthorized - Authentication required or failed |
+| 403 | Forbidden - Insufficient permissions |
+| 404 | Not Found - Resource doesn't exist |
+| 500 | Internal Server Error |
+
+Error responses include a message:
+
+```json
+{
+  "statusCode": 404,
+  "statusMessage": "Client not found"
+}
+```
+
+---
+
+## Rate Limiting
+
+Currently, there are no enforced rate limits on API endpoints. However, it's recommended to implement client-side rate limiting to avoid overwhelming the server.
+
+---
+
+## Webhooks
+
+For webhook configuration and events, see the [Hooks documentation](/advanced/hooks).

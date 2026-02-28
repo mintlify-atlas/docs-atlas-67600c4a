@@ -1,0 +1,460 @@
+---
+title: Metrics & Monitoring
+description: Monitor your WireGuard server with Prometheus metrics and Grafana dashboards
+---
+
+## Overview
+
+WireGuard Easy provides built-in metrics endpoints for monitoring your VPN server and clients. The metrics can be scraped by Prometheus and visualized using Grafana dashboards.
+
+## Enable Metrics
+
+To enable metrics collection:
+
+1. Navigate to **Admin Panel** → **General** in the web interface
+2. Enable the **Prometheus** metrics option
+3. Optionally set a **Bearer Password** for securing the metrics endpoint
+4. Click **Save**
+
+<Note>
+  Setting a bearer password is highly recommended if your metrics endpoint is exposed to the internet.
+</Note>
+
+---
+
+## Prometheus Metrics
+
+### Endpoint
+
+Prometheus metrics are available at:
+
+```
+GET /metrics/prometheus
+```
+
+### Authentication
+
+If you configured a bearer password, include it in the request:
+
+```bash
+curl -H "Authorization: Bearer YOUR_PASSWORD" \
+  https://example.com:51821/metrics/prometheus
+```
+
+### Available Metrics
+
+WireGuard Easy exposes the following Prometheus metrics:
+
+#### Server Metrics
+
+<ResponseField name="wireguard_configured_peers" type="gauge">
+  Total number of configured client peers
+  
+  **Labels:**
+  - `interface` - WireGuard interface name (e.g., `wg0`)
+</ResponseField>
+
+<ResponseField name="wireguard_enabled_peers" type="gauge">
+  Number of enabled client peers
+  
+  **Labels:**
+  - `interface` - WireGuard interface name
+</ResponseField>
+
+<ResponseField name="wireguard_connected_peers" type="gauge">
+  Number of currently connected peers (recent handshake)
+  
+  **Labels:**
+  - `interface` - WireGuard interface name
+</ResponseField>
+
+#### Per-Client Metrics
+
+<ResponseField name="wireguard_sent_bytes" type="counter">
+  Total bytes sent to the peer
+  
+  **Labels:**
+  - `interface` - WireGuard interface name
+  - `name` - Client name
+  - `enabled` - Whether client is enabled (`true`/`false`)
+  - `ipv4Address` - Client IPv4 address
+  - `ipv6Address` - Client IPv6 address
+</ResponseField>
+
+<ResponseField name="wireguard_received_bytes" type="counter">
+  Total bytes received from the peer
+  
+  **Labels:**
+  - `interface` - WireGuard interface name
+  - `name` - Client name
+  - `enabled` - Whether client is enabled
+  - `ipv4Address` - Client IPv4 address
+  - `ipv6Address` - Client IPv6 address
+</ResponseField>
+
+<ResponseField name="wireguard_latest_handshake_seconds" type="gauge">
+  Seconds since the last successful handshake (0 if never connected)
+  
+  **Labels:**
+  - `interface` - WireGuard interface name
+  - `name` - Client name
+  - `enabled` - Whether client is enabled
+  - `ipv4Address` - Client IPv4 address
+  - `ipv6Address` - Client IPv6 address
+</ResponseField>
+
+### Example Metrics Output
+
+```prometheus
+# HELP wireguard_configured_peers
+# TYPE wireguard_configured_peers gauge
+wireguard_configured_peers{interface="wg0"} 5
+
+# HELP wireguard_enabled_peers
+# TYPE wireguard_enabled_peers gauge
+wireguard_enabled_peers{interface="wg0"} 4
+
+# HELP wireguard_connected_peers
+# TYPE wireguard_connected_peers gauge
+wireguard_connected_peers{interface="wg0"} 3
+
+# HELP wireguard_sent_bytes Bytes sent to the peer
+# TYPE wireguard_sent_bytes counter
+wireguard_sent_bytes{interface="wg0",enabled="true",ipv4Address="10.8.0.2",ipv6Address="fd42:42:42::2",name="Laptop"} 2097152
+wireguard_sent_bytes{interface="wg0",enabled="true",ipv4Address="10.8.0.3",ipv6Address="fd42:42:42::3",name="Phone"} 1048576
+
+# HELP wireguard_received_bytes Bytes received from the peer
+# TYPE wireguard_received_bytes counter
+wireguard_received_bytes{interface="wg0",enabled="true",ipv4Address="10.8.0.2",ipv6Address="fd42:42:42::2",name="Laptop"} 4194304
+wireguard_received_bytes{interface="wg0",enabled="true",ipv4Address="10.8.0.3",ipv6Address="fd42:42:42::3",name="Phone"} 524288
+
+# HELP wireguard_latest_handshake_seconds UNIX timestamp seconds of the last handshake
+# TYPE wireguard_latest_handshake_seconds gauge
+wireguard_latest_handshake_seconds{interface="wg0",enabled="true",ipv4Address="10.8.0.2",ipv6Address="fd42:42:42::2",name="Laptop"} 45
+wireguard_latest_handshake_seconds{interface="wg0",enabled="true",ipv4Address="10.8.0.3",ipv6Address="fd42:42:42::3",name="Phone"} 120
+```
+
+---
+
+## Prometheus Configuration
+
+Add WireGuard Easy to your Prometheus scrape configuration:
+
+### Without Authentication
+
+```yaml prometheus.yml
+scrape_configs:
+  - job_name: 'wg-easy'
+    scrape_interval: 30s
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets:
+          - 'localhost:51821'
+```
+
+### With Bearer Authentication
+
+```yaml prometheus.yml
+scrape_configs:
+  - job_name: 'wg-easy'
+    scrape_interval: 30s
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets:
+          - 'wg-easy.example.com:51821'
+    authorization:
+      type: Bearer
+      credentials: 'SuperSecurePassword'
+```
+
+### Using Docker Service Discovery
+
+If running Prometheus in Docker alongside WireGuard Easy:
+
+```yaml prometheus.yml
+scrape_configs:
+  - job_name: 'wg-easy'
+    scrape_interval: 30s
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets:
+          - 'wg-easy:51821'  # Use container name
+    authorization:
+      type: Bearer
+      credentials: 'SuperSecurePassword'
+```
+
+---
+
+## Grafana Dashboard
+
+Visualize your WireGuard metrics with a pre-built Grafana dashboard.
+
+### Dashboard ID: 21733
+
+[![Grafana Dashboard Preview](https://grafana.com/api/dashboards/21733/images/16863/image)](https://grafana.com/grafana/dashboards/21733-wireguard/)
+
+[View Dashboard on Grafana.com →](https://grafana.com/grafana/dashboards/21733-wireguard/)
+
+<Warning>
+  This dashboard is community-maintained and not officially supported by the WireGuard Easy team. For issues or improvements, please contact the dashboard author.
+  
+  See [GitHub PR #1299](https://github.com/wg-easy/wg-easy/pull/1299) for more information.
+</Warning>
+
+### Import the Dashboard
+
+1. Open your Grafana instance
+2. Navigate to **Dashboards** → **Import**
+3. Enter dashboard ID: **21733**
+4. Select your Prometheus data source
+5. Click **Import**
+
+### Dashboard Features
+
+The dashboard includes:
+
+- **Server Overview:** Total, enabled, and connected peers
+- **Network Traffic:** Data transfer rates and totals per client
+- **Client Status:** Connection status and last handshake times
+- **Historical Trends:** Traffic patterns over time
+- **Alerts:** Disconnected clients and unusual traffic patterns
+
+---
+
+## Example Queries
+
+Useful PromQL queries for monitoring your WireGuard server:
+
+### Total Data Transfer
+
+```promql
+# Total bytes sent to all clients
+sum(wireguard_sent_bytes{interface="wg0"})
+
+# Total bytes received from all clients
+sum(wireguard_received_bytes{interface="wg0"})
+```
+
+### Client Connection Status
+
+```promql
+# Connected clients (handshake within last 3 minutes)
+count(wireguard_latest_handshake_seconds{interface="wg0"} < 180)
+
+# Disconnected clients
+count(wireguard_latest_handshake_seconds{interface="wg0"} > 180)
+```
+
+### Traffic by Client
+
+```promql
+# Sent bytes per client
+wireguard_sent_bytes{interface="wg0"}
+
+# Data transfer rate (per second)
+rate(wireguard_received_bytes{interface="wg0"}[5m])
+```
+
+### Connection Health
+
+```promql
+# Percentage of enabled peers that are connected
+(wireguard_connected_peers / wireguard_enabled_peers) * 100
+```
+
+---
+
+## Docker Compose Setup
+
+Complete example with WireGuard Easy, Prometheus, and Grafana:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    environment:
+      - PASSWORD=secure-password
+      - WG_HOST=your-server-ip
+    volumes:
+      - ./config:/etc/wireguard
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+```
+
+---
+
+## Alerting
+
+### Prometheus Alert Rules
+
+Create alerts for common issues:
+
+```yaml alerts.yml
+groups:
+  - name: wireguard
+    interval: 30s
+    rules:
+      - alert: WireGuardClientDisconnected
+        expr: wireguard_latest_handshake_seconds{enabled="true"} > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WireGuard client {{ $labels.name }} disconnected"
+          description: "Client {{ $labels.name }} at {{ $labels.ipv4Address }} has not connected for {{ $value }} seconds"
+
+      - alert: WireGuardHighTraffic
+        expr: rate(wireguard_received_bytes[5m]) > 100000000  # 100 MB/s
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High traffic on WireGuard client {{ $labels.name }}"
+          description: "Client {{ $labels.name }} is receiving {{ $value }} bytes/sec"
+
+      - alert: WireGuardNoConnectedPeers
+        expr: wireguard_connected_peers == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No WireGuard clients connected"
+          description: "WireGuard server has no connected clients for 10 minutes"
+```
+
+### Load Alert Rules
+
+Update your `prometheus.yml`:
+
+```yaml
+rule_files:
+  - 'alerts.yml'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+```
+
+---
+
+## JSON Metrics
+
+In addition to Prometheus metrics, WireGuard Easy can expose metrics in JSON format (if enabled in the admin panel).
+
+This feature can be useful for custom integrations or monitoring tools that prefer JSON over the Prometheus format.
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Secure Your Metrics Endpoint">
+    - Always set a strong bearer password for production environments
+    - Consider using a reverse proxy with additional authentication
+    - Restrict network access to the metrics endpoint using firewall rules
+  </Accordion>
+
+  <Accordion title="Optimize Scrape Intervals">
+    - Use 30-60 second scrape intervals for real-time monitoring
+    - Longer intervals (5-10 minutes) are sufficient for historical data
+    - Balance between data granularity and storage requirements
+  </Accordion>
+
+  <Accordion title="Set Up Alerts">
+    - Create alerts for disconnected clients
+    - Monitor unusual traffic patterns
+    - Alert on server unavailability
+    - Use different severity levels (warning, critical)
+  </Accordion>
+
+  <Accordion title="Data Retention">
+    - Configure appropriate retention policies in Prometheus
+    - Archive historical data for compliance if needed
+    - Use remote storage for long-term retention
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Troubleshooting
+
+### Metrics Endpoint Returns 401
+
+The bearer password is incorrect or missing. Verify:
+
+```bash
+# Test with correct password
+curl -H "Authorization: Bearer YOUR_PASSWORD" \
+  https://example.com:51821/metrics/prometheus
+```
+
+### No Data in Grafana
+
+1. Verify Prometheus is scraping successfully:
+   - Open Prometheus UI at `http://prometheus:9090`
+   - Go to **Status** → **Targets**
+   - Check that WireGuard Easy target is "UP"
+
+2. Test a query in Prometheus:
+   ```promql
+   wireguard_connected_peers
+   ```
+
+3. Verify Grafana data source:
+   - Go to **Configuration** → **Data Sources**
+   - Test the Prometheus connection
+
+### Metrics Show Zero Values
+
+- Ensure WireGuard interface is running: `wg show`
+- Check that clients are connected
+- Verify metrics are enabled in the admin panel
+
+---
+
+## Related Documentation
+
+- [API Reference](/advanced/api) - Access metrics programmatically
+- [Security Best Practices](/advanced/security) - Secure your metrics endpoint
+- [Prometheus Documentation](https://prometheus.io/docs/) - Official Prometheus docs
+- [Grafana Documentation](https://grafana.com/docs/) - Official Grafana docs

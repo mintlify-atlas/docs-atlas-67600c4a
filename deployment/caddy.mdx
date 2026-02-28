@@ -1,0 +1,309 @@
+---
+title: Caddy Reverse Proxy
+description: Deploy WireGuard Easy behind Caddy reverse proxy with automatic HTTPS
+---
+
+This guide shows you how to deploy WireGuard Easy behind [Caddy](https://caddyserver.com/) as a reverse proxy with automatic HTTPS/TLS certificates.
+
+<Note>
+  This guide is opinionated. Feel free to adjust paths and conventions to match your environment.
+</Note>
+
+## Why Caddy?
+
+Caddy is an excellent choice for reverse proxying WireGuard Easy because it:
+
+- Automatically obtains and renews TLS certificates from Let's Encrypt
+- Has a simple, straightforward configuration syntax
+- Supports HTTP/3 out of the box
+- Handles HTTPS redirects automatically
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- A domain name pointing to your server (e.g., `wg-easy.example.com`)
+- Ports 80 and 443 available on your server
+- WireGuard Easy already deployed (see [Docker Compose](/deployment/docker-compose))
+
+<Steps>
+
+### Create Caddy directory structure
+
+First, create a directory for your Caddy configuration:
+
+```bash
+mkdir -p ~/caddy
+cd ~/caddy
+```
+
+Your directory structure will look like this:
+
+```
+.
+├── compose.yml
+└── Caddyfile
+```
+
+### Create Caddy Caddyfile
+
+Create a `Caddyfile` with your domain configuration:
+
+```caddyfile Caddyfile
+{
+    # Set your email address for Let's Encrypt notifications
+    email mail@example.com
+}
+
+wg-easy.example.com {
+    # Reverse proxy to wg-easy container
+    # Use container name since they share the same network
+    reverse_proxy wg-easy:51821
+    
+    # Optional: Enable response compression
+    encode gzip
+    
+    # Optional: Add security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+    }
+}
+```
+
+<Warning>
+  Replace `mail@example.com` with your actual email address and `wg-easy.example.com` with your domain.
+</Warning>
+
+### Create Caddy Docker Compose file
+
+Create a `compose.yml` file for Caddy:
+
+```yaml compose.yml
+services:
+  caddy:
+    container_name: caddy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # For HTTP/3 support
+    networks:
+      - caddy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+networks:
+  caddy:
+    name: caddy
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+### Start Caddy
+
+Launch Caddy with Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+Caddy will automatically obtain a TLS certificate from Let's Encrypt.
+
+### Configure WireGuard Easy
+
+Update your WireGuard Easy `compose.yml` to connect to the Caddy network:
+
+```yaml
+services:
+  wg-easy:
+    container_name: wg-easy
+    image: ghcr.io/wg-easy/wg-easy:latest
+    environment:
+      # Change port to 51821 (default)
+      - PORT=51821
+      # Set your WireGuard server hostname
+      - WG_HOST=wg-easy.example.com
+    ports:
+      # Only expose WireGuard UDP port
+      - "51820:51820/udp"
+      # Remove HTTP port - Caddy will handle it
+    networks:
+      - caddy
+    # ... rest of your configuration
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - wg-easy:/etc/wireguard
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  wg-easy:
+```
+
+<Warning>
+  Make sure to remove the HTTP port mapping (`51821:51821/tcp`) since Caddy will now handle all HTTP/HTTPS traffic.
+</Warning>
+
+### Restart WireGuard Easy
+
+Restart WireGuard Easy to apply the changes:
+
+```bash
+docker compose up -d
+```
+
+</Steps>
+
+## Verify setup
+
+Your WireGuard Easy instance should now be accessible at `https://wg-easy.example.com`.
+
+To verify:
+
+1. Visit `https://wg-easy.example.com` in your browser
+2. Check that the connection is secure (lock icon in address bar)
+3. Verify automatic HTTP to HTTPS redirect works by visiting `http://wg-easy.example.com`
+
+## Advanced configuration
+
+### Internal TLS certificates
+
+If you're running this in a private network without public DNS, use internal certificates:
+
+```caddyfile
+wg-easy.internal {
+    reverse_proxy wg-easy:51821
+    tls internal
+}
+```
+
+### Basic authentication
+
+Add an extra layer of authentication before reaching WireGuard Easy:
+
+```caddyfile
+wg-easy.example.com {
+    basicauth {
+        # Generate hash: caddy hash-password
+        alice $2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG
+    }
+    reverse_proxy wg-easy:51821
+}
+```
+
+<Note>
+  Generate password hashes using: `docker exec -it caddy caddy hash-password`
+</Note>
+
+### Rate limiting
+
+Protect against brute force attacks:
+
+```caddyfile
+wg-easy.example.com {
+    # Allow 10 requests per minute per IP
+    rate_limit {
+        zone wg_easy {
+            key {remote_host}
+            events 10
+            window 1m
+        }
+    }
+    reverse_proxy wg-easy:51821
+}
+```
+
+### Multiple domains
+
+Host multiple services with Caddy:
+
+```caddyfile
+wg-easy.example.com {
+    reverse_proxy wg-easy:51821
+}
+
+other-service.example.com {
+    reverse_proxy other-service:8080
+}
+```
+
+## Troubleshooting
+
+### Certificate issues
+
+If Let's Encrypt certificate acquisition fails:
+
+1. Verify your domain points to the correct IP
+2. Ensure ports 80 and 443 are accessible from the internet
+3. Check Caddy logs: `docker logs caddy`
+
+### Connection refused
+
+If you can't connect:
+
+1. Verify both containers are on the same network: `docker network inspect caddy`
+2. Check container name matches Caddyfile: `docker ps`
+3. Verify WireGuard Easy is listening on port 51821
+
+### Viewing logs
+
+Check Caddy logs for debugging:
+
+```bash
+docker logs caddy -f
+```
+
+## Security considerations
+
+<Warning>
+  **Important security practices:**
+  
+  - Always use HTTPS in production
+  - Keep Caddy updated to the latest version
+  - Use strong authentication for WireGuard Easy
+  - Consider adding fail2ban or rate limiting
+  - Restrict WireGuard Easy to trusted networks when possible
+</Warning>
+
+### Firewall rules
+
+Ensure your firewall allows:
+
+- TCP port 80 (HTTP - for certificate validation)
+- TCP port 443 (HTTPS)
+- UDP port 443 (HTTP/3)
+- UDP port 51820 (WireGuard)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Configure WireGuard Easy settings
+  </Card>
+  <Card title="Web UI" icon="browser" href="/features/web-ui">
+    Learn about the web interface
+  </Card>
+  <Card title="Security" icon="shield" href="/advanced/security">
+    Harden your deployment
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting/common-issues">
+    Fix common issues
+  </Card>
+</CardGroup>

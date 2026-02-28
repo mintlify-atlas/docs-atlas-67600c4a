@@ -1,0 +1,474 @@
+---
+title: Traefik Reverse Proxy
+description: Deploy WireGuard Easy behind Traefik reverse proxy with automatic HTTPS and Docker integration
+---
+
+This guide shows you how to deploy WireGuard Easy behind [Traefik](https://traefik.io/) as a reverse proxy with automatic HTTPS/TLS certificates and Docker service discovery.
+
+<Note>
+  This guide is opinionated. Feel free to adjust paths and conventions to match your environment.
+</Note>
+
+## Why Traefik?
+
+Traefik is an excellent choice for reverse proxying WireGuard Easy because it:
+
+- Automatically discovers Docker containers and configures routes
+- Obtains and renews TLS certificates from Let's Encrypt automatically
+- Supports HTTP/3 and modern protocols
+- Provides a dashboard for monitoring
+- Handles automatic HTTP to HTTPS redirects
+- Works well in dynamic environments
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- A domain name pointing to your server (e.g., `wg-easy.example.com`)
+- Ports 80 and 443 available on your server
+- WireGuard Easy already deployed (see [Docker Compose](/deployment/docker-compose))
+
+<Steps>
+
+### Create Traefik directory structure
+
+Create directories for Traefik configuration:
+
+```bash
+mkdir -p /etc/docker/containers/traefik
+mkdir -p /etc/docker/volumes/traefik
+cd /etc/docker/containers/traefik
+```
+
+### Create Traefik static configuration
+
+Create the main Traefik configuration file:
+
+```yaml /etc/docker/volumes/traefik/traefik.yml
+log:
+  level: INFO
+
+entryPoints:
+  web:
+    address: ':80/tcp'
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ':443/tcp'
+    http:
+      middlewares:
+        - compress@file
+        - hsts@file
+      tls:
+        certResolver: letsencrypt
+    http3: {}
+
+api:
+  dashboard: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: mail@example.com
+      storage: acme.json
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  docker:
+    watch: true
+    network: traefik
+    exposedByDefault: false
+  file:
+    filename: traefik_dynamic.yml
+
+serversTransport:
+  insecureSkipVerify: true
+```
+
+<Warning>
+  Replace `mail@example.com` with your actual email address for Let's Encrypt notifications.
+</Warning>
+
+### Create Traefik dynamic configuration
+
+Create the dynamic configuration file for middlewares and TLS options:
+
+```yaml /etc/docker/volumes/traefik/traefik_dynamic.yml
+http:
+  middlewares:
+    compress:
+      compress: {}
+    hsts:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+    securityHeaders:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "same-origin"
+
+  routers:
+    # Traefik dashboard route (optional)
+    api:
+      rule: Host(`traefik.example.com`)
+      entrypoints:
+        - websecure
+      middlewares:
+        - auth
+      service: api@internal
+
+  # Basic auth for Traefik dashboard (optional)
+  services:
+    basicAuth:
+      users:
+        # Generate with: htpasswd -nb username password
+        # Example: admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/
+        - 'admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/'
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      sniStrict: true
+```
+
+### Create ACME storage file
+
+Create the file for storing Let's Encrypt certificates:
+
+```bash
+touch /etc/docker/volumes/traefik/acme.json
+chmod 600 /etc/docker/volumes/traefik/acme.json
+```
+
+<Warning>
+  The `acme.json` file must have 600 permissions or Traefik will refuse to start.
+</Warning>
+
+### Create Docker network
+
+Create a dedicated network for Traefik:
+
+```bash
+docker network create traefik
+```
+
+### Create Traefik Docker Compose file
+
+Create `docker-compose.yml` for Traefik:
+
+```yaml /etc/docker/containers/traefik/docker-compose.yml
+services:
+  traefik:
+    image: traefik:3.3
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443/tcp"
+      - "443:443/udp"  # For HTTP/3 support
+    networks:
+      - traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/docker/volumes/traefik/traefik.yml:/traefik.yml:ro
+      - /etc/docker/volumes/traefik/traefik_dynamic.yml:/traefik_dynamic.yml:ro
+      - /etc/docker/volumes/traefik/acme.json:/acme.json
+    labels:
+      - "traefik.enable=true"
+
+networks:
+  traefik:
+    external: true
+```
+
+### Start Traefik
+
+Launch Traefik:
+
+```bash
+cd /etc/docker/containers/traefik
+docker compose up -d
+```
+
+Verify Traefik is running:
+
+```bash
+docker logs traefik
+```
+
+### Configure WireGuard Easy with labels
+
+Update your WireGuard Easy `docker-compose.yml` to add Traefik labels:
+
+```yaml /etc/docker/containers/wg-easy/docker-compose.yml
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: unless-stopped
+    environment:
+      - WG_HOST=wg-easy.example.com
+      - PORT=51821
+    ports:
+      # Only expose WireGuard UDP port
+      - "51820:51820/udp"
+      # No need to expose HTTP port - Traefik handles it
+    networks:
+      - traefik
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - wg-easy:/etc/wireguard
+    labels:
+      # Enable Traefik for this container
+      - "traefik.enable=true"
+      # Define the router
+      - "traefik.http.routers.wg-easy.rule=Host(`wg-easy.example.com`)"
+      - "traefik.http.routers.wg-easy.entrypoints=websecure"
+      - "traefik.http.routers.wg-easy.tls.certresolver=letsencrypt"
+      # Define the service
+      - "traefik.http.routers.wg-easy.service=wg-easy"
+      - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
+      # Specify the network
+      - "traefik.docker.network=traefik"
+
+networks:
+  traefik:
+    external: true
+
+volumes:
+  wg-easy:
+```
+
+<Warning>
+  Replace `wg-easy.example.com` with your actual domain name.
+</Warning>
+
+### Restart WireGuard Easy
+
+Restart WireGuard Easy to apply the changes:
+
+```bash
+cd /etc/docker/containers/wg-easy
+docker compose up -d
+```
+
+</Steps>
+
+## Verify setup
+
+Your WireGuard Easy instance should now be accessible at `https://wg-easy.example.com`.
+
+To verify:
+
+1. Visit `https://wg-easy.example.com` in your browser
+2. Check that the connection is secure (lock icon)
+3. Verify HTTP to HTTPS redirect: `http://wg-easy.example.com`
+4. Check Traefik dashboard (if configured): `https://traefik.example.com`
+
+## Advanced configuration
+
+### Add middleware to WireGuard Easy
+
+Apply rate limiting and security headers:
+
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.wg-easy.rule=Host(`wg-easy.example.com`)"
+  - "traefik.http.routers.wg-easy.entrypoints=websecure"
+  - "traefik.http.routers.wg-easy.middlewares=securityHeaders@file,ratelimit@docker"
+  - "traefik.http.middlewares.ratelimit.ratelimit.average=100"
+  - "traefik.http.middlewares.ratelimit.ratelimit.burst=50"
+```
+
+### IP whitelist
+
+Restrict access to specific IP addresses:
+
+```yaml
+labels:
+  - "traefik.http.routers.wg-easy.middlewares=ipwhitelist@docker"
+  - "traefik.http.middlewares.ipwhitelist.ipwhitelist.sourcerange=192.168.1.0/24,10.0.0.0/8"
+```
+
+### Basic authentication
+
+Add an authentication layer:
+
+```yaml
+labels:
+  - "traefik.http.routers.wg-easy.middlewares=auth@docker"
+  - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
+```
+
+<Note>
+  Generate password hash: `htpasswd -nb username password`
+  
+  In Docker Compose, escape `$` as `$$`
+</Note>
+
+### Custom TLS configuration
+
+Use custom TLS options per route:
+
+```yaml
+labels:
+  - "traefik.http.routers.wg-easy.tls.options=default@file"
+```
+
+### Multiple domains
+
+Route multiple domains to the same service:
+
+```yaml
+labels:
+  - "traefik.http.routers.wg-easy.rule=Host(`wg-easy.example.com`) || Host(`vpn.example.com`)"
+```
+
+## Monitoring
+
+### Traefik dashboard
+
+Access the Traefik dashboard to monitor routes and services:
+
+1. Ensure dashboard is enabled in `traefik.yml`
+2. Configure authentication in `traefik_dynamic.yml`
+3. Access at `https://traefik.example.com`
+
+### Metrics
+
+Enable Prometheus metrics in `traefik.yml`:
+
+```yaml
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+```
+
+## Troubleshooting
+
+### Certificate issues
+
+If Let's Encrypt certificate acquisition fails:
+
+1. Verify domain DNS points to your server
+2. Check ports 80 and 443 are accessible
+3. Review Traefik logs: `docker logs traefik`
+4. Verify `acme.json` has correct permissions (600)
+5. Check Let's Encrypt rate limits
+
+### Service not discovered
+
+If Traefik doesn't discover WireGuard Easy:
+
+1. Verify `traefik.enable=true` label is set
+2. Check both containers are on the same network
+3. Ensure `exposedByDefault: false` in `traefik.yml`
+4. Review Traefik logs for errors
+
+### Connection issues
+
+If you can't connect:
+
+```bash
+# Check if containers are running
+docker ps
+
+# Inspect the network
+docker network inspect traefik
+
+# View Traefik routes
+docker exec traefik traefik healthcheck
+
+# Check logs
+docker logs traefik -f
+docker logs wg-easy -f
+```
+
+### 404 or 502 errors
+
+1. Verify the service port matches the container: `loadbalancer.server.port=51821`
+2. Check WireGuard Easy is listening on the correct port
+3. Ensure network name matches: `traefik.docker.network=traefik`
+
+## Security considerations
+
+<Warning>
+  **Important security practices:**
+  
+  - Always use HTTPS in production
+  - Keep Traefik updated to the latest version
+  - Secure the Docker socket or use Docker socket proxy
+  - Use strong authentication for WireGuard Easy and Traefik dashboard
+  - Enable rate limiting to prevent abuse
+  - Consider IP whitelisting for sensitive services
+  - Review and minimize exposed ports
+  - Use security headers middleware
+</Warning>
+
+### Secure Docker socket
+
+Consider using a Docker socket proxy instead of mounting `/var/run/docker.sock` directly:
+
+```yaml
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: docker-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik
+
+  traefik:
+    # ... other config
+    environment:
+      - DOCKER_HOST=tcp://docker-proxy:2375
+```
+
+### Firewall rules
+
+Configure firewall to allow:
+
+- TCP port 80 (HTTP - for ACME challenges)
+- TCP port 443 (HTTPS)
+- UDP port 443 (HTTP/3)
+- UDP port 51820 (WireGuard)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Configure WireGuard Easy settings
+  </Card>
+  <Card title="Web UI" icon="browser" href="/features/web-ui">
+    Learn about the web interface
+  </Card>
+  <Card title="Security" icon="shield" href="/advanced/security">
+    Harden your deployment
+  </Card>
+  <Card title="Metrics" icon="chart-line" href="/advanced/metrics">
+    Monitor your deployment
+  </Card>
+</CardGroup>

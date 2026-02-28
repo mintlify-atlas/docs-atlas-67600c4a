@@ -1,0 +1,332 @@
+---
+title: Getting Started with WireGuard Easy
+description: Complete guide to deploying WireGuard Easy with Docker Compose, from prerequisites to creating your first VPN client.
+---
+
+# Getting Started
+
+This guide walks you through deploying WireGuard Easy and creating your first VPN client. We'll use Docker Compose as the recommended deployment method.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+1. **A Linux host** that you can manage (VPS, dedicated server, or home server)
+2. **A domain name or public IP address** for clients to connect to
+3. **Supported architecture**: x86_64 or arm64
+4. **Root or sudo access** to install Docker and manage the server
+
+<Info>
+While this guide focuses on Docker Compose, WireGuard Easy also supports Docker Run and Podman. See the [Installation](/installation) page for alternative methods.
+</Info>
+
+## Step 1: Install Docker
+
+If Docker is not already installed on your host, install it using the official installation script:
+
+```bash
+curl -sSL https://get.docker.com | sh
+```
+
+This script automatically detects your Linux distribution and installs Docker Engine and Docker Compose.
+
+<Note>
+For detailed Docker installation instructions specific to your distribution, visit the [official Docker documentation](https://docs.docker.com/engine/install/).
+</Note>
+
+## Step 2: Prepare Configuration Directory
+
+Create a directory to store your WireGuard Easy configuration:
+
+```bash
+sudo mkdir -p /etc/docker/containers/wg-easy
+```
+
+This directory will contain your `docker-compose.yml` file and can be used for additional configuration.
+
+## Step 3: Download Docker Compose File
+
+Download the official `docker-compose.yml` configuration:
+
+```bash
+sudo curl -o /etc/docker/containers/wg-easy/docker-compose.yml \
+  https://raw.githubusercontent.com/wg-easy/wg-easy/master/docker-compose.yml
+```
+
+The compose file includes:
+
+<CodeGroup>
+```yaml docker-compose.yml
+volumes:
+  etc_wireguard:
+
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    networks:
+      wg:
+        ipv4_address: 10.42.42.42
+        ipv6_address: fdcc:ad94:bacf:61a3::2a
+    volumes:
+      - etc_wireguard:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "51820:51820/udp"  # WireGuard VPN
+      - "51821:51821/tcp"  # Web UI
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+
+networks:
+  wg:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.42.42.0/24
+        - subnet: fdcc:ad94:bacf:61a3::/64
+```
+</CodeGroup>
+
+## Step 4: Start WireGuard Easy
+
+Navigate to your configuration directory and start the container:
+
+```bash
+cd /etc/docker/containers/wg-easy
+sudo docker compose up -d
+```
+
+The `-d` flag runs the container in detached mode (background).
+
+<Warning>
+**Important**: Always use `docker compose up` / `down`, not `docker compose start` / `stop`. Using start/stop may leave the container in an inconsistent state and cause startup problems.
+</Warning>
+
+## Step 5: Configure Firewall
+
+Open the required ports in your firewall:
+
+- **UDP 51820**: WireGuard VPN traffic
+- **TCP 51821**: Web UI access (should be behind a reverse proxy in production)
+
+<CodeGroup>
+```bash UFW (Ubuntu/Debian)
+sudo ufw allow 51820/udp
+sudo ufw allow 51821/tcp
+```
+
+```bash firewalld (RHEL/CentOS)
+sudo firewall-cmd --permanent --add-port=51820/udp
+sudo firewall-cmd --permanent --add-port=51821/tcp
+sudo firewall-cmd --reload
+```
+
+```bash iptables
+sudo iptables -A INPUT -p udp --dport 51820 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 51821 -j ACCEPT
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+</CodeGroup>
+
+<Note>
+If you change the default ports in your Docker Compose configuration, update your firewall rules accordingly.
+</Note>
+
+## Step 6: Complete Initial Setup
+
+Open your web browser and navigate to:
+
+```
+http://your-server-ip:51821
+```
+
+You'll be greeted with the setup wizard:
+
+<Steps>
+  <Step title="Create Admin Account">
+    Set up your admin username and password for accessing the web interface.
+  </Step>
+  
+  <Step title="Configure Host Settings">
+    Enter your server's public IP address or domain name that clients will use to connect.
+    
+    - **Host**: Your domain (e.g., `vpn.example.com`) or public IP
+    - **Port**: `51820` (default WireGuard port)
+    
+    <Tip>
+    For IPv6 addresses, wrap them in brackets: `[2001:db8::1]`
+    </Tip>
+  </Step>
+  
+  <Step title="Import Existing Config (Optional)">
+    If migrating from v14, you can import your existing `wg0.json` configuration file.
+  </Step>
+</Steps>
+
+## Step 7: Create Your First VPN Client
+
+Once logged into the web interface:
+
+<Steps>
+  <Step title="Click 'New Client'">
+    Navigate to the main dashboard and click the "New Client" button.
+  </Step>
+  
+  <Step title="Enter Client Details">
+    Provide a name for your client (e.g., "My Phone", "Laptop", "Work Computer").
+  </Step>
+  
+  <Step title="Download or Scan QR Code">
+    - **Mobile devices**: Scan the QR code with the WireGuard mobile app
+    - **Desktop devices**: Download the configuration file and import it into the WireGuard client
+  </Step>
+  
+  <Step title="Connect and Test">
+    Enable the VPN connection on your client device and verify connectivity.
+  </Step>
+</Steps>
+
+<Info>
+By default, clients are configured with:
+- **Allowed IPs**: `0.0.0.0/0, ::/0` (all traffic through VPN)
+- **DNS**: `1.1.1.1` (Cloudflare DNS)
+- **IPv4 and IPv6 addresses** automatically assigned
+</Info>
+
+## Understanding Version Tags
+
+WireGuard Easy uses semantic versioning with the following tag convention:
+
+| Tag | Type | Example | Description |
+|-----|------|---------|-------------|
+| `15` | Major | `ghcr.io/wg-easy/wg-easy:15` | Latest features for v15, no breaking changes (recommended) |
+| `15.0` | Minor | `ghcr.io/wg-easy/wg-easy:15.0` | Latest patches for v15.0 |
+| `15.0.0` | Specific | `ghcr.io/wg-easy/wg-easy:15.0.0` | Specific release, no updates |
+| `edge` | Development | `ghcr.io/wg-easy/wg-easy:edge` | Latest from master, potentially unstable |
+| `latest` | Legacy | `ghcr.io/wg-easy/wg-easy:latest` | Points to v14, avoid using |
+
+<Tip>
+Pin to the latest major version (e.g., `15`) to receive updates and bug fixes without breaking changes.
+</Tip>
+
+## Optional: Set Up Reverse Proxy
+
+For production environments, secure your web UI with HTTPS using a reverse proxy:
+
+<CardGroup cols={2}>
+  <Card title="Traefik" icon="server">
+    Automatic HTTPS with Let's Encrypt integration
+  </Card>
+  
+  <Card title="Caddy" icon="globe">
+    Automatic HTTPS with simple configuration
+  </Card>
+  
+  <Card title="Nginx" icon="n">
+    Traditional reverse proxy with manual SSL setup
+  </Card>
+  
+  <Card title="No Reverse Proxy" icon="warning">
+    Access over HTTP with INSECURE mode (testing only)
+  </Card>
+</CardGroup>
+
+<Warning>
+Never expose the web UI directly to the internet without HTTPS in production. Always use a reverse proxy with valid SSL certificates.
+</Warning>
+
+## Managing Your WireGuard Easy Instance
+
+### View Logs
+
+```bash
+sudo docker compose logs -f wg-easy
+```
+
+### Stop WireGuard Easy
+
+```bash
+sudo docker compose down
+```
+
+### Update to Latest Version
+
+```bash
+cd /etc/docker/containers/wg-easy
+sudo docker compose pull
+sudo docker compose up -d
+```
+
+### Restart the Container
+
+```bash
+sudo docker compose restart
+```
+
+## Troubleshooting
+
+### Error: Cannot find device "wg0"
+
+Load the WireGuard kernel module:
+
+```bash
+sudo modprobe wireguard
+echo "wireguard" | sudo tee -a /etc/modules
+```
+
+### Error: iptables table 'nat' does not exist
+
+Load the required iptables modules:
+
+```bash
+sudo modprobe iptable_nat
+sudo modprobe ip6table_nat
+echo "iptable_nat" | sudo tee -a /etc/modules
+echo "ip6table_nat" | sudo tee -a /etc/modules
+```
+
+### Web UI Not Accessible
+
+1. Check if the container is running:
+   ```bash
+   sudo docker compose ps
+   ```
+
+2. Verify firewall rules are correct
+
+3. Check container logs for errors:
+   ```bash
+   sudo docker compose logs
+   ```
+
+## Next Steps
+
+Now that you have WireGuard Easy running:
+
+<CardGroup cols={2}>
+  <Card title="Optional Configuration" icon="gear">
+    Customize environment variables like PORT, HOST, and IPv6 settings
+  </Card>
+  
+  <Card title="Client Management" icon="users">
+    Learn about advanced client configuration options
+  </Card>
+  
+  <Card title="2FA Setup" icon="shield">
+    Enable two-factor authentication for enhanced security
+  </Card>
+  
+  <Card title="Prometheus Metrics" icon="chart-line">
+    Monitor your VPN with Prometheus and Grafana
+  </Card>
+</CardGroup>

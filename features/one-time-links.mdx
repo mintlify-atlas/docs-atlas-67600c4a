@@ -1,0 +1,447 @@
+---
+title: One-Time Links
+description: Generate secure, temporary shareable links for client configurations
+---
+
+One-time links provide a secure method to share WireGuard configurations without sending files or displaying QR codes.
+
+## What Are One-Time Links?
+
+One-time links are temporary, shareable URLs that provide access to a client's WireGuard configuration for a limited time.
+
+### Key Features
+
+<CardGroup cols={2}>
+  <Card title="Time-Limited" icon="clock">
+    Links automatically expire after a configurable time period
+  </Card>
+  <Card title="Secure" icon="shield">
+    Unique, non-guessable URLs generated for each request
+  </Card>
+  <Card title="Revocable" icon="ban">
+    Can be invalidated immediately if needed
+  </Card>
+  <Card title="Trackable" icon="eye">
+    View active links and their expiration times
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+One-time links are ideal for:
+
+- **Remote Setup**: Share configurations with users who aren't physically present
+- **Mobile Devices**: Alternative to QR codes when camera access is problematic
+- **Desktop Computers**: Easy way to transfer configs to non-mobile devices
+- **Temporary Access**: Quickly provision access that auto-expires
+- **Support Scenarios**: Allow users to self-serve configuration downloads
+
+## Generating One-Time Links
+
+Create a temporary shareable link for any client:
+
+<Steps>
+  <Step title="Locate the Client">
+    Find the client card in the main clients list.
+  </Step>
+  
+  <Step title="Click Link Icon">
+    Click the link icon button on the right side of the client card.
+  </Step>
+  
+  <Step title="Link Generated">
+    The system generates a unique link and displays it on the client card.
+  </Step>
+  
+  <Step title="Share the Link">
+    Copy and share the link through your preferred communication channel.
+  </Step>
+</Steps>
+
+<Info>
+Generating a new one-time link immediately invalidates any previously generated link for that client.
+</Info>
+
+## Link Display
+
+Active one-time links are shown directly on the client card:
+
+```
+Format: https://your-server.com/cnf/ABC123DEF456 (15:30)
+
+Components:
+- Base URL: Your WireGuard Easy server
+- Path: /cnf/
+- Token: Unique identifier
+- Timer: Countdown to expiration
+```
+
+### Countdown Timer
+
+The timer displays remaining validity in MM:SS format:
+
+- **Green**: More than 5 minutes remaining
+- **Yellow**: Between 2-5 minutes remaining
+- **Red**: Less than 2 minutes remaining
+- **00:00**: Link has expired but remains clickable
+
+<Note>
+The countdown updates every second, providing real-time feedback on link validity.
+</Note>
+
+## Using One-Time Links
+
+Recipients can access the configuration by simply opening the link:
+
+<Tabs>
+  <Tab title="Web Browser">
+    <Steps>
+      <Step title="Open Link">
+        Click or paste the link in any web browser.
+      </Step>
+      
+      <Step title="Download Configuration">
+        The browser automatically downloads the `.conf` file.
+      </Step>
+      
+      <Step title="Import to WireGuard">
+        Open the file with the WireGuard application to import.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Mobile Device">
+    <Steps>
+      <Step title="Receive Link">
+        Get the link via email, SMS, or messaging app.
+      </Step>
+      
+      <Step title="Tap Link">
+        Tap the link to open in mobile browser.
+      </Step>
+      
+      <Step title="Download Config">
+        The configuration file downloads to your device.
+      </Step>
+      
+      <Step title="Open with WireGuard">
+        Use "Share" or "Open With" to import into WireGuard app.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Command Line">
+    <Steps>
+      <Step title="Download with curl">
+        ```bash
+        curl -O https://your-server.com/cnf/ABC123DEF456
+        ```
+      </Step>
+      
+      <Step title="Rename File">
+        ```bash
+        mv ABC123DEF456 client.conf
+        ```
+      </Step>
+      
+      <Step title="Import Configuration">
+        ```bash
+        sudo wg-quick up ./client.conf
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Link Expiration
+
+Links automatically expire after a configured time period:
+
+### Default Expiration
+
+**Time Limit**: Typically 15-30 minutes (configurable by administrator)
+
+**Behavior After Expiration**:
+- Link becomes invalid
+- Access attempts return an error
+- Link is removed from the database
+- Client card no longer displays the link
+
+<Warning>
+Expired links cannot be recovered. Generate a new link if the previous one expires before use.
+</Warning>
+
+### Manual Revocation
+
+To immediately invalidate a link:
+
+1. Generate a new one-time link for the same client
+2. The previous link is automatically revoked
+3. Only the most recent link remains valid
+
+<Tip>
+If you suspect a link was shared with an unintended recipient, immediately generate a new one to revoke the old link.
+</Tip>
+
+## Security Considerations
+
+### Link Security
+
+One-time links are designed with security in mind:
+
+<AccordionGroup>
+  <Accordion title="Cryptographically Random">
+    **Token Generation**:
+    - Cryptographically secure random generation
+    - 128+ bits of entropy
+    - Non-sequential, non-guessable
+    - No predictable patterns
+    
+    This makes brute-force attacks computationally infeasible.
+  </Accordion>
+  
+  <Accordion title="Time-Bound Access">
+    **Expiration Benefits**:
+    - Limits exposure window
+    - Reduces risk of link leakage
+    - Automatic cleanup of old links
+    - Forces regeneration for extended access
+    
+    Even if a link is compromised, it becomes useless after expiration.
+  </Accordion>
+  
+  <Accordion title="Single Client Scope">
+    **Isolation**:
+    - Each link accesses only one client configuration
+    - No ability to enumerate other clients
+    - No admin access through links
+    - Read-only configuration access
+    
+    Compromised links cannot be used to access other resources.
+  </Accordion>
+</AccordionGroup>
+
+### Best Practices
+
+<Steps>
+  <Step title="Use Secure Channels">
+    Share links through encrypted communication:
+    - **Encrypted Messaging**: Signal, WhatsApp, Telegram
+    - **Secure Email**: ProtonMail, Tutanota
+    - **In-Person**: Direct device-to-device transfer
+    
+    Avoid unencrypted channels like SMS or plain email when possible.
+  </Step>
+  
+  <Step title="Verify Recipients">
+    Ensure you're sharing with the intended person:
+    - Confirm identity before sharing
+    - Use out-of-band verification
+    - Don't share links publicly
+  </Step>
+  
+  <Step title="Monitor Usage">
+    Check client activity after sharing:
+    - Verify the client connects successfully
+    - Monitor for unexpected endpoints
+    - Disable clients if suspicious activity detected
+  </Step>
+  
+  <Step title="Minimize Validity Window">
+    Coordinate with recipients:
+    - Generate link when recipient is ready
+    - Share immediately before use
+    - Let link expire if not used promptly
+  </Step>
+</Steps>
+
+<Warning>
+One-time links contain full VPN credentials including private keys. Treat them with the same security as passwords or API keys.
+</Warning>
+
+## Technical Implementation
+
+### Database Structure
+
+```sql
+oneTimeLinks Table:
+- id: Primary key
+- clientId: Associated client
+- oneTimeLink: Random token
+- expiresAt: Expiration timestamp
+- createdAt: Creation timestamp
+```
+
+### API Endpoint
+
+**Generation**:
+```http
+POST /api/client/{clientId}/generateOneTimeLink
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true
+}
+```
+
+**Access**:
+```http
+GET /cnf/{oneTimeLink}
+
+Response:
+Content-Type: text/plain
+Content-Disposition: attachment; filename="client.conf"
+
+[WireGuard configuration content]
+```
+
+### Permission Requirements
+
+**To Generate**:
+- Authenticated user
+- `clients:update` permission
+- Access to the specific client
+
+**To Access**:
+- No authentication required
+- Valid, non-expired token
+- Link must exist in database
+
+## Troubleshooting
+
+### Link Not Generating
+
+<Steps>
+  <Step title="Check Permissions">
+    Ensure your user account has update permissions for clients.
+  </Step>
+  
+  <Step title="Verify Client Exists">
+    Confirm the client hasn't been deleted.
+  </Step>
+  
+  <Step title="Check Server Logs">
+    Review logs for database or permission errors.
+  </Step>
+  
+  <Step title="Test Server Connectivity">
+    Ensure the WireGuard Easy server is accessible.
+  </Step>
+</Steps>
+
+### Link Not Working
+
+**Common Issues**:
+
+<AccordionGroup>
+  <Accordion title="Link Expired">
+    **Symptom**: Error message when accessing link
+    
+    **Solution**: Generate a new one-time link
+    
+    **Prevention**: Share links immediately after generation
+  </Accordion>
+  
+  <Accordion title="Link Revoked">
+    **Symptom**: Link worked previously but now fails
+    
+    **Cause**: New link generated for the same client
+    
+    **Solution**: Request the latest link
+  </Accordion>
+  
+  <Accordion title="Network Issues">
+    **Symptom**: Link won't load or times out
+    
+    **Causes**:
+    - Server is down
+    - Network connectivity problems
+    - Firewall blocking access
+    
+    **Solution**: Verify server status and network connectivity
+  </Accordion>
+  
+  <Accordion title="Client Deleted">
+    **Symptom**: Link generates but configuration is invalid
+    
+    **Cause**: Client was deleted after link generation
+    
+    **Solution**: Recreate the client and generate a new link
+  </Accordion>
+</AccordionGroup>
+
+### Download Issues
+
+**Browser Not Downloading**:
+- Check browser download settings
+- Disable download blockers
+- Try a different browser
+- Use command-line download (curl/wget)
+
+**File Format Issues**:
+- Ensure `.conf` extension is preserved
+- Verify file contents are plain text
+- Check for corrupted downloads
+- Re-download if necessary
+
+<Info>
+If downloads consistently fail, use the direct configuration download button on the client card instead.
+</Info>
+
+## Comparison with Other Methods
+
+<Tabs>
+  <Tab title="One-Time Links">
+    **Advantages**:
+    - Remote sharing capability
+    - No camera required
+    - Works on all devices
+    - Time-limited security
+    
+    **Disadvantages**:
+    - Requires network access
+    - Link could be intercepted
+    - Manual file import needed
+    - Expiration management needed
+  </Tab>
+  
+  <Tab title="QR Codes">
+    **Advantages**:
+    - Instant mobile setup
+    - No file transfer needed
+    - Visual confirmation
+    - Offline capable
+    
+    **Disadvantages**:
+    - Requires camera access
+    - Must be physically present
+    - Mobile devices only
+    - Can be photographed
+  </Tab>
+  
+  <Tab title="Configuration Files">
+    **Advantages**:
+    - No expiration
+    - Offline storage
+    - Backup capability
+    - Universal compatibility
+    
+    **Disadvantages**:
+    - File transfer logistics
+    - No automatic expiration
+    - Permanent credential storage
+    - Can be easily copied
+  </Tab>
+</Tabs>
+
+## Future Enhancements
+
+Planned improvements to one-time links:
+
+- **Custom Expiration**: Set expiration time per link
+- **Usage Limits**: Single-use links that expire after first download
+- **Access Logging**: Track who accessed the link and when
+- **Password Protection**: Optional password for additional security
+- **Link Analytics**: View link status and access history
+- **Bulk Generation**: Create links for multiple clients at once

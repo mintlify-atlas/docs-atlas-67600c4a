@@ -1,0 +1,398 @@
+---
+title: Statistics and Monitoring
+description: Real-time traffic monitoring and connection statistics for WireGuard clients
+---
+
+WireGuard Easy provides comprehensive real-time statistics and traffic monitoring for all connected clients.
+
+## Overview
+
+The statistics system tracks bandwidth usage, connection status, and historical data for each VPN client.
+
+### Available Metrics
+
+<CardGroup cols={2}>
+  <Card title="Data Transfer" icon="chart-line">
+    Real-time upload and download statistics for each client
+  </Card>
+  <Card title="Connection Status" icon="signal">
+    Last seen timestamps and online/offline indicators
+  </Card>
+  <Card title="Traffic Charts" icon="chart-area">
+    Visual representation of bandwidth usage over time
+  </Card>
+  <Card title="Endpoint Information" icon="network-wired">
+    Client's current public IP and port
+  </Card>
+</CardGroup>
+
+## Real-Time Traffic Monitoring
+
+### Transfer Statistics
+
+Each client card displays current transfer rates:
+
+```
+↑ TX: Upload traffic (client to server)
+↓ RX: Download traffic (server to client)
+```
+
+**Format**: Human-readable byte formatting
+- **B**: Bytes (0-1023)
+- **KB**: Kilobytes (1024-1048575)
+- **MB**: Megabytes (1048576-1073741823)
+- **GB**: Gigabytes (1073741824+)
+
+<Info>
+Transfer statistics update every second, providing near real-time monitoring of your VPN traffic.
+</Info>
+
+### Traffic Charts
+
+Visual bandwidth representation with sparkline charts:
+
+<Tabs>
+  <Tab title="Enabling Charts">
+    Click the chart toggle button in the header to enable traffic visualization:
+    
+    <Steps>
+      <Step title="Locate Chart Toggle">
+        Find the chart icon in the top right of the header bar.
+      </Step>
+      
+      <Step title="Click to Enable">
+        Click once to enable charts for all clients.
+      </Step>
+      
+      <Step title="View Real-Time Data">
+        Charts appear on each client card showing recent traffic patterns.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Chart Types">
+    Two chart type options available:
+    
+    **Area Chart** (Default)
+    - Filled gradient visualization
+    - Easy to see traffic volume at a glance
+    - Smooth gradient from accent color to transparent
+    
+    **Line Chart**
+    - Clean line representation
+    - Minimal visual clutter
+    - Precise data point tracking
+  </Tab>
+  
+  <Tab title="Chart Features">
+    - **Dual Charts**: Separate TX (upload) and RX (download) visualization
+    - **Color-Coded**: Distinct colors for upload and download
+    - **Sparkline Format**: Compact chart without axes for space efficiency
+    - **Smooth Curves**: Gradient smoothing for better readability
+    - **Real-Time Updates**: Charts update with each data refresh
+  </Tab>
+</Tabs>
+
+### Chart Configuration
+
+Charts use the ApexCharts library with optimized settings:
+
+```javascript
+Chart Settings:
+- Type: Area or Line
+- Animation: Disabled for performance
+- Gradient: Vertical fade to transparent
+- Smoothing: Bezier curves
+- Update: Every 1 second
+```
+
+<Tip>
+Disable charts on low-powered devices or when managing many clients to improve interface performance.
+</Tip>
+
+## Connection Status
+
+### Last Seen Indicator
+
+Tracks the most recent client activity:
+
+**Time Formats**:
+- **Just now**: Activity within the last 30 seconds
+- **X seconds ago**: Within the last minute
+- **X minutes ago**: Within the last hour
+- **X hours ago**: Within the last day
+- **X days ago**: Older than 24 hours
+- **Never**: No recorded connection
+
+<Note>
+The "Last Seen" timestamp updates based on WireGuard handshake activity. Clients must successfully complete a handshake to register as "seen".
+</Note>
+
+### Endpoint Information
+
+When viewing detailed client configuration, the endpoint field shows:
+
+```
+Format: <public_ip>:<port>
+Example: 203.0.113.45:51820
+```
+
+This indicates:
+- Client's current public IP address
+- Source port for the WireGuard connection
+- Useful for troubleshooting NAT and firewall issues
+
+<Info>
+The endpoint is read-only and automatically detected by WireGuard. It represents where the server sees traffic coming from.
+</Info>
+
+## Data Refresh Mechanism
+
+Statistics automatically update at regular intervals:
+
+### Refresh Settings
+
+**Frequency**: 1 second (1000ms)
+
+**What Updates**:
+- Client transfer statistics
+- Last seen timestamps
+- Traffic chart data (if enabled)
+- Connection status
+
+**Performance Optimization**:
+- Charts only update when visible
+- Background tabs reduce refresh rate
+- Efficient delta updates
+- Minimal server load
+
+### Manual Refresh
+
+The system handles refresh automatically, but you can trigger updates by:
+- Navigating away and back to the page
+- Toggling chart visibility
+- Reloading the browser page
+
+## Understanding Transfer Data
+
+### Cumulative vs. Rate
+
+WireGuard Easy displays both total transfer and transfer rate:
+
+**Total Transfer**:
+```
+Displayed: 1.5 GB / 2.3 GB
+Meaning: 1.5 GB uploaded, 2.3 GB downloaded since client creation
+```
+
+**Transfer Rate**:
+```
+Displayed via: Real-time chart updates
+Calculated: Current traffic per second
+Visualized: Chart height and gradient intensity
+```
+
+### Reset Behavior
+
+Transfer statistics reset when:
+- The WireGuard interface restarts
+- The server reboots
+- The client reconnects after interface restart
+
+<Warning>
+Statistics are not persistent across server restarts. They represent the current session's data transfer only.
+</Warning>
+
+## Performance Considerations
+
+### Impact on Server
+
+**Minimal Load**:
+- Statistics read from WireGuard kernel module
+- No additional background processes
+- Efficient data structure access
+- Negligible CPU overhead
+
+### Impact on Browser
+
+**Resource Usage**:
+- **Charts Disabled**: Very low (simple DOM updates)
+- **Charts Enabled**: Moderate (chart rendering)
+- **Many Clients**: Linear increase with client count
+
+<Tabs>
+  <Tab title="Optimization Tips">
+    For optimal performance with many clients:
+    
+    1. **Disable Charts**: Use the header toggle when charts aren't needed
+    2. **Modern Browser**: Ensure your browser is up to date
+    3. **Hardware Acceleration**: Enable GPU acceleration in browser settings
+    4. **Close Unused Tabs**: Reduce overall browser resource usage
+  </Tab>
+  
+  <Tab title="Scaling Guidelines">
+    Tested performance characteristics:
+    
+    - **1-50 clients**: Excellent performance with charts
+    - **50-200 clients**: Good performance, consider disabling charts
+    - **200-500 clients**: Use search/filter, disable charts
+    - **500+ clients**: Implement pagination (future feature)
+  </Tab>
+</Tabs>
+
+## Monitoring Best Practices
+
+### Identifying Issues
+
+<AccordionGroup>
+  <Accordion title="No Traffic Detected">
+    **Possible Causes**:
+    - Client is connected but idle (no active traffic)
+    - Client failed to establish connection
+    - Configuration error preventing traffic flow
+    - Firewall blocking packets
+    
+    **Troubleshooting**:
+    - Check Last Seen timestamp
+    - Verify client is enabled
+    - Test connectivity with ping
+    - Review client logs
+  </Accordion>
+  
+  <Accordion title="Unexpected Traffic Patterns">
+    **High Upload, Low Download**:
+    - Typical for client-initiated traffic
+    - Uploading files or backups
+    - Sending data to services
+    
+    **High Download, Low Upload**:
+    - Streaming or downloading content
+    - Normal browsing patterns
+    - File synchronization
+    
+    **Symmetric Traffic**:
+    - Video calls
+    - Real-time collaboration
+    - Peer-to-peer applications
+  </Accordion>
+  
+  <Accordion title="Connection Drops">
+    **Symptoms**:
+    - Last Seen timestamp increasing
+    - Traffic charts showing gaps
+    - Periodic disconnections
+    
+    **Solutions**:
+    - Enable Persistent Keepalive (25 seconds)
+    - Check client network stability
+    - Verify MTU settings
+    - Review server logs for errors
+  </Accordion>
+</AccordionGroup>
+
+### Security Monitoring
+
+Use statistics to identify security concerns:
+
+**Unusual Activity**:
+- Unexpected traffic from inactive clients
+- Abnormally high bandwidth usage
+- Connections from unexpected endpoints
+- Traffic patterns inconsistent with user behavior
+
+<Warning>
+Regularly audit client statistics for anomalies. Disabled unused clients and investigate suspicious patterns.
+</Warning>
+
+### Capacity Planning
+
+Traffic statistics inform infrastructure decisions:
+
+1. **Bandwidth Usage**: Monitor total traffic to ensure adequate server capacity
+2. **Client Count**: Track active clients vs. configured clients
+3. **Peak Times**: Identify high-traffic periods
+4. **Growth Trends**: Plan for future scaling needs
+
+## Limitations and Known Issues
+
+### Current Limitations
+
+<Note>
+- **No Historical Data**: Statistics are not stored long-term
+- **Session-Based**: Resets on server restart
+- **No Aggregation**: No total across all clients
+- **No Export**: Cannot export statistics data
+- **No Alerts**: No threshold-based notifications
+</Note>
+
+### Future Enhancements
+
+Planned improvements to the statistics system:
+
+- Long-term statistics storage
+- Historical data visualization
+- Bandwidth alerts and quotas
+- Per-client traffic limits
+- Statistics export (CSV, JSON)
+- Aggregate dashboard view
+- Client comparison tools
+
+## Advanced Monitoring
+
+### External Monitoring Integration
+
+For advanced monitoring, integrate with external tools:
+
+**Prometheus**:
+```yaml
+Export WireGuard metrics using:
+- wireguard_exporter
+- Node exporter with WireGuard collector
+```
+
+**Grafana**:
+```yaml
+Create dashboards for:
+- Per-client bandwidth graphs
+- Connection status panels
+- Alert rules for thresholds
+- Historical trend analysis
+```
+
+**SNMP**:
+```yaml
+Monitor interface statistics:
+- Interface traffic counters
+- Error rates
+- Connection counts
+```
+
+<Tip>
+For enterprise deployments, consider implementing external monitoring for persistent metrics, alerting, and historical analysis.
+</Tip>
+
+### API Access
+
+Access statistics programmatically:
+
+```bash
+# Get all clients with statistics
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  https://your-server.com/api/client?filter=all
+
+# Response includes transfer data:
+{
+  "id": 1,
+  "name": "Client Name",
+  "transferRx": 1234567890,
+  "transferTx": 9876543210,
+  "latestHandshakeAt": "2024-02-28T12:34:56Z",
+  ...
+}
+```
+
+This enables:
+- Custom monitoring dashboards
+- Automated reporting
+- Integration with billing systems
+- Capacity planning automation

@@ -1,0 +1,382 @@
+---
+title: Migrate from v14 to v15
+description: Complete guide for migrating from WireGuard Easy v14 to v15 with step-by-step instructions for backup, configuration migration, and troubleshooting.
+---
+
+This guide will help you migrate from WireGuard Easy v14 to v15. Version 15 represents a complete rewrite with significant improvements including a new UI, SQLite database, API authentication, and enhanced mobile support.
+
+<Warning>
+  v15 is a complete rewrite with breaking changes. While the migration process is straightforward, we recommend reading through this entire guide before starting.
+</Warning>
+
+## Breaking Changes in v15
+
+Before migrating, be aware of these major changes:
+
+- **Environment Variables**: Almost all environment variables have been removed and moved to the Admin Panel in the Web UI
+- **Database**: Now uses SQLite instead of file-based storage
+- **API**: Changed API structure with Basic Authentication required
+- **Architecture Support**: ARMv6 support has been removed
+- **Docker Volume**: New `/lib/modules` volume mount required
+- **HTTP Access**: Requires `INSECURE=true` environment variable for HTTP connections
+- **License**: Changed from CC BY-NC-SA 4.0 to AGPL-3.0-only
+- **Versioning**: Switched from incrementing versions to Semantic Versioning
+- **Tag**: `nightly` tag replaced with `edge`
+
+<Warning>
+  **ARMv6 and ARMv7 Users**: If you're running on ARMv6 architecture, you cannot migrate to v15. ARMv7 support was also removed in v15.2.0.
+</Warning>
+
+## Prerequisites
+
+<Steps>
+  <Step title="Check Architecture Compatibility">
+    Verify your system architecture is supported (amd64 or arm64):
+    
+    ```bash
+    docker version --format '{{.Server.Arch}}'
+    ```
+    
+    If the output shows `armv6` or `armv7`, you cannot proceed with the migration.
+  </Step>
+  
+  <Step title="Note Your Current Configuration">
+    Document all environment variables you're currently using:
+    
+    ```bash
+    # For docker run users
+    docker inspect wg-easy | grep -A 20 Env
+    
+    # For docker compose users
+    cat docker-compose.yml
+    ```
+    
+    Save this information - you'll need to reconfigure these settings in the Web UI.
+  </Step>
+  
+  <Step title="Ensure Docker is Updated">
+    Make sure you're running a recent version of Docker:
+    
+    ```bash
+    docker --version
+    ```
+    
+    Docker version 20.10 or newer is recommended.
+  </Step>
+</Steps>
+
+## Migration Process
+
+<Steps>
+  <Step title="Backup Your Configuration">
+    There are two ways to backup your configuration:
+    
+    **Option 1: Via Web UI (Recommended)**
+    
+    1. Open the WireGuard Easy Web UI
+    2. Click the **Backup** button in the interface
+    3. This will download a `wg0.json` file to your computer
+    4. Store this file in a safe location
+    
+    **Option 2: Direct File Copy**
+    
+    If you can't access the Web UI, copy the configuration directly:
+    
+    ```bash
+    # Find your container name
+    docker ps | grep wg-easy
+    
+    # Copy the config file from the container
+    docker cp wg-easy:/etc/wireguard/wg0.json ~/wg0.json.backup
+    ```
+    
+    <Warning>
+      Keep this backup file secure! It contains your WireGuard private keys and client configurations.
+    </Warning>
+  </Step>
+  
+  <Step title="Stop and Remove Old Container">
+    Stop your v14 container:
+    
+    **For docker run installations:**
+    
+    ```bash
+    docker stop wg-easy
+    docker rm wg-easy
+    ```
+    
+    **For docker compose installations:**
+    
+    ```bash
+    cd /path/to/docker-compose/directory
+    docker compose down
+    ```
+    
+    <Note>
+      Your Docker volumes are preserved when removing containers. Your configuration data is safe.
+    </Note>
+  </Step>
+  
+  <Step title="Update Docker Compose or Run Command">
+    Update your deployment method with the v15 configuration:
+    
+    **For docker compose:**
+    
+    Create a new `docker-compose.yml` with the v15 configuration:
+    
+    ```yaml
+    services:
+      wg-easy:
+        image: ghcr.io/wg-easy/wg-easy:15
+        container_name: wg-easy
+        environment:
+          # Required for HTTP access (if not using HTTPS)
+          - INSECURE=true  # Remove this if using HTTPS
+          # Optional configurations
+          - PORT=51821
+          - HOST=0.0.0.0
+        volumes:
+          - ~/.wg-easy:/etc/wireguard
+          - /lib/modules:/lib/modules  # New requirement in v15
+        ports:
+          - "51820:51820/udp"  # WireGuard port
+          - "51821:51821/tcp"  # Web UI port
+        cap_add:
+          - NET_ADMIN
+          - SYS_MODULE
+        sysctls:
+          - net.ipv4.conf.all.src_valid_mark=1
+          - net.ipv4.ip_forward=1
+        restart: unless-stopped
+    ```
+    
+    **For docker run:**
+    
+    ```bash
+    docker run -d \
+      --name=wg-easy \
+      --cap-add=NET_ADMIN \
+      --cap-add=SYS_MODULE \
+      --sysctl="net.ipv4.conf.all.src_valid_mark=1" \
+      --sysctl="net.ipv4.ip_forward=1" \
+      -e INSECURE=true \
+      -v ~/.wg-easy:/etc/wireguard \
+      -v /lib/modules:/lib/modules \
+      -p 51820:51820/udp \
+      -p 51821:51821/tcp \
+      --restart unless-stopped \
+      ghcr.io/wg-easy/wg-easy:15
+    ```
+    
+    <Note>
+      The new `/lib/modules` volume mount is required for proper WireGuard kernel module access.
+    </Note>
+  </Step>
+  
+  <Step title="Start v15 Container">
+    Start the new v15 container:
+    
+    **For docker compose:**
+    
+    ```bash
+    docker compose up -d
+    ```
+    
+    **For docker run:**
+    
+    The container is already started from the previous step.
+    
+    Verify it's running:
+    
+    ```bash
+    docker ps | grep wg-easy
+    docker logs wg-easy
+    ```
+  </Step>
+  
+  <Step title="Complete Setup Wizard">
+    1. Open your browser and navigate to `http://your-server-ip:51821`
+    2. You'll see the v15 setup wizard
+    3. In the wizard, select **"I already have a configuration file"**
+    4. Upload the `wg0.json` file you backed up in Step 1
+    5. Create a new admin username and password
+    6. Optionally set up 2FA (new feature in v15)
+    7. Complete the setup wizard
+    
+    The wizard will automatically:
+    - Import all your existing clients
+    - Migrate your WireGuard interface configuration
+    - Set up the new SQLite database
+    - Configure your interface settings
+  </Step>
+  
+  <Step title="Reconfigure Settings from Environment Variables">
+    In v14, most settings were configured via environment variables. In v15, these are managed through the Web UI.
+    
+    1. Log in to the Admin Panel
+    2. Navigate to **Settings** or **Configuration**
+    3. Configure the settings that were previously environment variables:
+       - WireGuard host/endpoint
+       - DNS servers
+       - MTU size
+       - Persistent keepalive
+       - Allowed IPs
+       - Post-up/post-down scripts
+    
+    Refer to your saved environment variables from the Prerequisites section.
+  </Step>
+  
+  <Step title="Verify Migration">
+    Confirm everything is working:
+    
+    1. **Check all clients are imported**: Review the clients list in the Web UI
+    2. **Verify client connectivity**: Test connection from at least one client device
+    3. **Check WireGuard status**:
+       ```bash
+       docker exec wg-easy wg show
+       ```
+    4. **Review logs for errors**:
+       ```bash
+       docker logs wg-easy
+       ```
+  </Step>
+</Steps>
+
+## Post-Migration Configuration
+
+### Accessing the API
+
+v15 introduces API Basic Authentication. To use the API:
+
+1. Generate API credentials in the Admin Panel
+2. Use Basic Auth in your API requests:
+
+```bash
+curl -u username:password http://your-server:51821/api/clients
+```
+
+### Setting Up 2FA
+
+v15 adds Two-Factor Authentication support:
+
+1. Go to Admin Panel → Security Settings
+2. Enable 2FA
+3. Scan the QR code with your authenticator app
+4. Enter the verification code to confirm
+
+### Configuring Unattended Setup
+
+If you need to automate future deployments, v15 supports unattended setup with environment variables:
+
+```yaml
+environment:
+  - INIT_ENABLED=true
+  - INIT_USERNAME=admin
+  - INIT_PASSWORD=YourSecurePassword
+  - INIT_HOST=vpn.example.com
+  - INIT_PORT=51820
+  - INIT_DNS=1.1.1.1,8.8.8.8
+  - INIT_IPV4_CIDR=10.8.0.0/24
+  - INIT_IPV6_CIDR=fd00::/64
+```
+
+## Rollback Procedure
+
+If you encounter issues and need to rollback to v14:
+
+<Steps>
+  <Step title="Stop v15 Container">
+    ```bash
+    docker stop wg-easy
+    docker rm wg-easy
+    ```
+  </Step>
+  
+  <Step title="Restore Your Backup">
+    If you used docker volumes, your v14 configuration should still be intact. If you moved or changed volumes, restore from backup:
+    
+    ```bash
+    docker cp ~/wg0.json.backup wg-easy:/etc/wireguard/wg0.json
+    ```
+  </Step>
+  
+  <Step title="Start v14 Container">
+    Use your original v14 docker compose file or run command:
+    
+    ```bash
+    # Change the image tag to v14
+    docker run -d ... ghcr.io/wg-easy/wg-easy:14
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  If you created new clients in v15 before rolling back, you'll need to manually backup their configurations first.
+</Warning>
+
+## Troubleshooting
+
+### Web UI Won't Load
+
+If you're accessing via HTTP and the Web UI won't load:
+
+```yaml
+environment:
+  - INSECURE=true  # Required for HTTP access in v15
+```
+
+### Upload Fails During Setup
+
+If the configuration upload fails:
+
+1. Verify the `wg0.json` file is valid JSON
+2. Check file permissions
+3. Try using a smaller batch - manually create clients if needed
+4. Check docker logs: `docker logs wg-easy`
+
+### Clients Can't Connect After Migration
+
+1. Verify the endpoint in Settings matches your v14 configuration
+2. Check firewall rules allow traffic on the WireGuard port
+3. Confirm the WireGuard interface is up:
+   ```bash
+   docker exec wg-easy wg show
+   ```
+4. Regenerate client configs if needed
+
+### Missing Environment Variable Settings
+
+If settings from your v14 environment variables aren't applied:
+
+- These must be manually configured in the Admin Panel
+- Go to Settings and configure each option
+- The setup wizard only imports the `wg0.json` configuration
+
+### Database Errors
+
+If you see SQLite database errors:
+
+```bash
+# Check database permissions
+docker exec wg-easy ls -la /etc/wireguard/
+
+# Restart container
+docker restart wg-easy
+```
+
+## Additional Resources
+
+- [Getting Started Guide](/getting-started)
+- [Docker Compose Installation](/deployment/docker-compose)
+- [Environment Variables](/configuration/environment-variables)
+- [Unattended Setup](/configuration/unattended-setup)
+- [API Documentation](/advanced/api)
+
+## Support
+
+If you encounter issues during migration:
+
+1. Check the [GitHub Issues](https://github.com/wg-easy/wg-easy/issues)
+2. Review the [Changelog](https://github.com/wg-easy/wg-easy/blob/master/CHANGELOG.md)
+3. Join the community discussions
+4. Ensure you're using the latest v15.x release

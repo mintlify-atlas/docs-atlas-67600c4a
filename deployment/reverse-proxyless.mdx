@@ -1,0 +1,407 @@
+---
+title: Without Reverse Proxy
+description: Deploy WireGuard Easy without a reverse proxy - understand the risks and when it's appropriate
+---
+
+This guide explains how to run WireGuard Easy without a reverse proxy. This configuration is **not recommended** for production use but may be suitable for specific scenarios.
+
+<Warning>
+  **Security Warning**
+  
+  Running WireGuard Easy without HTTPS is insecure. Your credentials and configuration data will be transmitted in plain text over the network.
+  
+  Only use this method if you fully understand the security implications.
+</Warning>
+
+## When is this appropriate?
+
+Running without a reverse proxy may be acceptable in these **limited scenarios**:
+
+- **Local network only**: Access restricted to a trusted local network (e.g., home LAN)
+- **Testing and development**: Non-production environments for testing
+- **Behind VPN**: Already accessing the server through a secure VPN tunnel
+- **Internal network**: Corporate network with other security controls in place
+- **Temporary setup**: Short-term deployment while configuring proper HTTPS
+
+## When is this NOT appropriate?
+
+<Warning>
+  **Never use this configuration when:**
+  
+  - The web interface is accessible from the internet
+  - Multiple users need access
+  - Handling sensitive VPN configurations
+  - Required to meet compliance standards
+  - Production or business-critical deployments
+  - Public Wi-Fi or untrusted networks involved
+</Warning>
+
+## Security risks
+
+Running without HTTPS exposes you to several security threats:
+
+### 1. Credential theft
+
+Login credentials are transmitted in plain text and can be intercepted by:
+- Network sniffing tools
+- Man-in-the-middle (MITM) attacks
+- Compromised network devices
+
+### 2. Session hijacking
+
+Session tokens can be stolen, allowing attackers to:
+- Impersonate authenticated users
+- Access and modify VPN configurations
+- Create malicious VPN clients
+
+### 3. Configuration exposure
+
+WireGuard configuration data transmitted without encryption can reveal:
+- VPN server details
+- Network topology
+- Client configurations
+- Private keys (during client creation)
+
+### 4. Data tampering
+
+Without TLS, attackers can:
+- Modify data in transit
+- Inject malicious code
+- Alter VPN configurations
+
+## Configuration
+
+<Steps>
+
+### Enable insecure mode
+
+To run WireGuard Easy without a reverse proxy, you must explicitly enable insecure mode.
+
+Edit your `docker-compose.yml`:
+
+```yaml docker-compose.yml
+services:
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: unless-stopped
+    environment:
+      # Enable insecure mode (HTTP without TLS)
+      - INSECURE=true
+      
+      # Set your WireGuard host
+      - WG_HOST=192.168.1.100  # Use IP or hostname
+      
+      # Optional: Change the web interface port
+      - PORT=51821
+      
+      # Optional: Change the host binding
+      - HOST=0.0.0.0
+    ports:
+      # Expose web interface
+      - "51821:51821/tcp"
+      # Expose WireGuard port
+      - "51820:51820/udp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - wg-easy:/etc/wireguard
+
+volumes:
+  wg-easy:
+```
+
+<Note>
+  The `INSECURE=true` environment variable is **required** to run without HTTPS. This is a safety feature to prevent accidental insecure deployments.
+</Note>
+
+### Restrict network access
+
+If running on a local network, bind the web interface to your local IP:
+
+```yaml
+ports:
+  # Bind only to local network interface
+  - "192.168.1.100:51821:51821/tcp"
+  - "51820:51820/udp"
+```
+
+Or bind to localhost only:
+
+```yaml
+ports:
+  # Only accessible from the host machine
+  - "127.0.0.1:51821:51821/tcp"
+  - "51820:51820/udp"
+```
+
+### Configure firewall
+
+Restrict access using firewall rules:
+
+```bash
+# UFW (Ubuntu/Debian)
+# Allow WireGuard from anywhere
+sudo ufw allow 51820/udp
+
+# Allow web interface only from local network
+sudo ufw allow from 192.168.1.0/24 to any port 51821
+
+# FirewallD (CentOS/RHEL/Fedora)
+sudo firewall-cmd --permanent --add-port=51820/udp
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="192.168.1.0/24" port port="51821" protocol="tcp" accept'
+sudo firewall-cmd --reload
+```
+
+### Start WireGuard Easy
+
+Start the container:
+
+```bash
+docker compose up -d
+```
+
+Access the web interface at:
+```
+http://your-server-ip:51821
+```
+
+</Steps>
+
+## Additional security measures
+
+If you must run without HTTPS, implement these additional security controls:
+
+### 1. Strong authentication
+
+Enable password protection and use a strong password:
+
+```yaml
+environment:
+  - PASSWORD=your-very-strong-password-here
+  - INSECURE=true
+```
+
+<Note>
+  Use a password manager to generate a strong, random password with at least 20 characters.
+</Note>
+
+### 2. Enable 2FA
+
+Enable two-factor authentication if available:
+
+```yaml
+environment:
+  - UI_TWO_FACTOR_ENABLED=true
+  - INSECURE=true
+```
+
+See [Two-Factor Authentication](/features/2fa) for more details.
+
+### 3. Network isolation
+
+Run on an isolated network segment:
+
+- Use VLANs to separate management traffic
+- Implement network access controls (NAC)
+- Deploy on a dedicated management network
+
+### 4. VPN access only
+
+Require VPN connection before accessing the web interface:
+
+```yaml
+environment:
+  - HOST=10.8.0.1  # Bind to VPN network interface
+  - INSECURE=true
+```
+
+### 5. Monitoring and logging
+
+Enable comprehensive logging:
+
+```yaml
+services:
+  wg-easy:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+Monitor access logs regularly:
+
+```bash
+docker logs wg-easy -f
+```
+
+### 6. Regular updates
+
+Keep WireGuard Easy updated:
+
+```bash
+cd /path/to/wg-easy
+docker compose pull
+docker compose up -d
+```
+
+### 7. Fail2ban integration
+
+Implement fail2ban to block brute force attempts:
+
+```ini /etc/fail2ban/jail.local
+[wg-easy]
+enabled = true
+port = 51821
+filter = wg-easy
+logpath = /var/lib/docker/containers/*-json.log
+maxretry = 3
+bantime = 3600
+```
+
+## Migration to HTTPS
+
+You should migrate to HTTPS as soon as possible. Choose a reverse proxy solution:
+
+<CardGroup cols={3}>
+  <Card title="Caddy" icon="bolt" href="/deployment/caddy">
+    Automatic HTTPS with minimal configuration
+  </Card>
+  <Card title="Traefik" icon="route" href="/deployment/traefik">
+    Docker integration with auto-discovery
+  </Card>
+  <Card title="Nginx" icon="server" href="/deployment/nginx">
+    Battle-tested reverse proxy
+  </Card>
+</CardGroup>
+
+### Quick migration steps
+
+<Steps>
+
+1. **Choose a reverse proxy** (Caddy, Traefik, or Nginx)
+2. **Set up the reverse proxy** following the respective guide
+3. **Update WireGuard Easy configuration**:
+   ```yaml
+   environment:
+     # Remove INSECURE=true
+     - PORT=51821
+   ports:
+     # Remove public HTTP port
+     - "51820:51820/udp"
+   ```
+4. **Add to reverse proxy network**
+5. **Restart both services**
+6. **Test HTTPS access**
+
+</Steps>
+
+## Troubleshooting
+
+### Cannot access web interface
+
+1. Verify `INSECURE=true` is set:
+   ```bash
+   docker inspect wg-easy | grep INSECURE
+   ```
+
+2. Check port bindings:
+   ```bash
+   docker port wg-easy
+   ```
+
+3. Test connectivity:
+   ```bash
+   curl http://localhost:51821
+   ```
+
+4. Review logs:
+   ```bash
+   docker logs wg-easy
+   ```
+
+### Firewall blocking access
+
+Verify firewall rules:
+
+```bash
+# UFW
+sudo ufw status
+
+# FirewallD
+sudo firewall-cmd --list-all
+
+# iptables
+sudo iptables -L -n
+```
+
+### Container not starting
+
+Check for configuration errors:
+
+```bash
+docker compose config
+docker compose logs
+```
+
+## Environment variables
+
+Key environment variables for reverse-proxyless deployment:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INSECURE` | `false` | **Required.** Set to `true` to enable HTTP without TLS |
+| `PORT` | `51821` | Web interface port |
+| `HOST` | `0.0.0.0` | Host binding (use `127.0.0.1` for localhost only) |
+| `PASSWORD` | (none) | Admin password - **strongly recommended** |
+| `UI_TWO_FACTOR_ENABLED` | `false` | Enable 2FA for additional security |
+
+See [Environment Variables](/configuration/environment-variables) for the complete list.
+
+## Summary
+
+<Warning>
+  **Key takeaways:**
+  
+  - Running without HTTPS is **insecure** and **not recommended**
+  - Only suitable for isolated, local networks or testing
+  - Must explicitly set `INSECURE=true`
+  - Implement additional security measures (strong passwords, 2FA, firewall)
+  - **Migrate to HTTPS as soon as possible**
+</Warning>
+
+For production deployments, always use a reverse proxy with HTTPS:
+
+<CardGroup cols={3}>
+  <Card title="Caddy" icon="bolt" href="/deployment/caddy">
+    Easiest setup with automatic HTTPS
+  </Card>
+  <Card title="Traefik" icon="route" href="/deployment/traefik">
+    Best for Docker environments
+  </Card>
+  <Card title="Nginx" icon="server" href="/deployment/nginx">
+    Most flexible and widely used
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Migrate to Caddy" icon="bolt" href="/deployment/caddy">
+    Set up HTTPS with Caddy
+  </Card>
+  <Card title="Security Best Practices" icon="shield" href="/advanced/security">
+    Harden your deployment
+  </Card>
+  <Card title="Two-Factor Auth" icon="lock" href="/features/2fa">
+    Add an extra security layer
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Configure all settings
+  </Card>
+</CardGroup>

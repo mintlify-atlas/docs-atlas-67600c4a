@@ -1,0 +1,198 @@
+---
+title: db:admin:reset
+description: Reset the admin user password and TOTP settings
+---
+
+The `db:admin:reset` command allows you to reset the admin user's password and clear their TOTP (Time-based One-Time Password) settings. This is useful when you've lost access to your admin account or need to disable two-factor authentication.
+
+## Syntax
+
+```bash
+cli db:admin:reset [--password <new_password>]
+```
+
+## Arguments
+
+<ParamField path="password" type="string" optional>
+  The new password for the admin user. If not provided, you will be prompted to enter it interactively.
+  
+  **Requirements:**
+  - Minimum 12 characters long
+  - Can contain letters, numbers, and special characters
+</ParamField>
+
+## Behavior
+
+When you run this command, it will:
+
+1. Prompt for a new password (if not provided via `--password`)
+2. Validate that the password is at least 12 characters long
+3. Hash the password securely
+4. Update the admin user (user ID 1) in the database
+5. Clear the TOTP verification status (`totpVerified: false`)
+6. Remove any existing TOTP key (`totpKey: null`)
+
+<Note>
+This command specifically targets the admin user with ID 1. TOTP settings are automatically reset, allowing you to set up two-factor authentication again after logging in with the new password.
+</Note>
+
+## Examples
+
+### Interactive Mode (Recommended)
+
+Run the command without arguments to be prompted for the password:
+
+**Docker Compose:**
+```bash
+cd /etc/docker/containers/wg-easy
+docker compose exec -it wg-easy cli db:admin:reset
+```
+
+**Example output:**
+```
+? Please enter a new password: ••••••••••••••••
+ℹ Setting new password for admin user...
+✔ Successfully updated admin user 1 (admin)
+```
+
+### With Password Argument
+
+Provide the password directly as an argument:
+
+**Docker Compose:**
+```bash
+docker compose exec -it wg-easy cli db:admin:reset --password "MySecurePassword123!"
+```
+
+**Docker Run:**
+```bash
+docker run --rm -it \
+    -v ~/.wg-easy:/etc/wireguard \
+    ghcr.io/wg-easy/wg-easy:15 \
+    cli db:admin:reset --password "MySecurePassword123!"
+```
+
+**Example output:**
+```
+ℹ Setting new password for admin user...
+✔ Successfully updated admin user 1 (admin)
+```
+
+## Use Cases
+
+### Locked Out of Admin Account
+
+If you've forgotten your admin password:
+
+```bash
+docker compose exec -it wg-easy cli db:admin:reset
+```
+
+You'll be prompted to enter a new password interactively.
+
+### Lost TOTP Device
+
+If you've lost access to your two-factor authentication device:
+
+```bash
+docker compose exec -it wg-easy cli db:admin:reset
+```
+
+This will reset both the password and TOTP settings, allowing you to log in and reconfigure 2FA.
+
+### Automated Deployment
+
+For scripted setups or CI/CD pipelines:
+
+```bash
+NEW_PASSWORD="$(openssl rand -base64 16)"
+docker compose exec -it wg-easy cli db:admin:reset --password "$NEW_PASSWORD"
+echo "Admin password set to: $NEW_PASSWORD"
+```
+
+### Password Policy Compliance
+
+Reset the password to meet updated security requirements:
+
+```bash
+docker compose exec -it wg-easy cli db:admin:reset --password "ComplexP@ssw0rd2024!"
+```
+
+## Error Messages
+
+### Password Too Short
+
+```
+✖ Password must be at least 12 characters long
+```
+
+**Solution:** Provide a password with at least 12 characters.
+
+### Password Required
+
+```
+✖ Password is required
+```
+
+**Solution:** Enter a password when prompted, or provide one via the `--password` argument.
+
+### Admin User Not Found
+
+```
+✖ Admin user not found
+```
+
+**Solution:** This indicates the database is missing the admin user. You may need to reinitialize the database or restore from backup.
+
+### Failed to Update Admin User
+
+```
+✖ Failed to update admin user
+```
+
+**Solution:** Check database permissions and ensure the database file is not corrupted. Verify that `/etc/wireguard/wg-easy.db` is accessible.
+
+## Security Considerations
+
+<Warning>
+**Command Line Arguments and History**
+
+When using the `--password` argument, be aware that:
+- The password may be visible in your shell history
+- The password may appear in process lists while the command is running
+- Other users on the system may be able to see the password
+
+For production environments, use the interactive prompt instead of passing passwords as arguments.
+</Warning>
+
+### Best Practices
+
+1. **Use Strong Passwords**: Always use passwords with at least 12 characters, combining uppercase, lowercase, numbers, and special characters.
+
+2. **Clear Shell History**: After running the command with `--password`, consider clearing your shell history:
+   ```bash
+   history -c
+   ```
+
+3. **Secure Access**: Ensure only authorized users have access to execute Docker commands on your WireGuard Easy container.
+
+4. **Re-enable TOTP**: After resetting, log in and immediately reconfigure two-factor authentication for additional security.
+
+5. **Special Characters**: If your password contains special characters, make sure to escape them properly or enclose the password in quotes:
+   ```bash
+   cli db:admin:reset --password 'P@ssw0rd$2024!'
+   ```
+
+## Database Location
+
+The command operates on the database located at:
+
+```
+/etc/wireguard/wg-easy.db
+```
+
+Ensure this file exists and is accessible within the Docker container. If you're using a custom volume mount, verify that the database path is correctly mapped.
+
+## Related Commands
+
+Currently, `db:admin:reset` is the primary administrative command. Future versions may include additional database management commands.

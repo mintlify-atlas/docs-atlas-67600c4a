@@ -1,0 +1,682 @@
+---
+title: Nginx Reverse Proxy
+description: Deploy WireGuard Easy behind Nginx reverse proxy with SSL/TLS encryption
+---
+
+This guide shows you how to deploy WireGuard Easy behind [Nginx](https://nginx.org/) as a reverse proxy with SSL/TLS certificates.
+
+<Note>
+  This guide is opinionated. Feel free to adjust paths and conventions to match your environment.
+</Note>
+
+## Why Nginx?
+
+Nginx is an excellent choice for reverse proxying WireGuard Easy because it:
+
+- Is battle-tested and widely deployed
+- Offers high performance and low resource usage
+- Provides extensive configuration options
+- Has a large community and abundant documentation
+- Works well with Let's Encrypt via Certbot
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- A domain name pointing to your server (e.g., `wg-easy.example.com`)
+- Ports 80 and 443 available on your server
+- WireGuard Easy already deployed (see [Docker Compose](/deployment/docker-compose))
+
+## Installation methods
+
+You can deploy Nginx in two ways:
+
+1. **Docker-based** (recommended): Run Nginx in a container alongside WireGuard Easy
+2. **Host-based**: Install Nginx directly on your host system
+
+<Tabs>
+  <Tab title="Docker (Recommended)">
+
+<Steps>
+
+### Create Nginx directory structure
+
+Create directories for Nginx configuration:
+
+```bash
+mkdir -p ~/nginx/{conf.d,ssl,certbot/www}
+cd ~/nginx
+```
+
+Your directory structure:
+
+```
+.
+├── compose.yml
+├── conf.d/
+│   └── wg-easy.conf
+├── ssl/
+└── certbot/
+    └── www/
+```
+
+### Create Nginx configuration
+
+Create the Nginx configuration file:
+
+```nginx conf.d/wg-easy.conf
+# HTTP server - redirect to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name wg-easy.example.com;
+
+    # ACME challenge location for Let's Encrypt
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Redirect all other traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name wg-easy.example.com;
+
+    # SSL certificate paths
+    ssl_certificate /etc/nginx/ssl/live/wg-easy.example.com/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/live/wg-easy.example.com/privkey.pem;
+
+    # SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305';
+    ssl_prefer_server_ciphers off;
+
+    # SSL session cache
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # OCSP stapling
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    ssl_trusted_certificate /etc/nginx/ssl/live/wg-easy.example.com/chain.pem;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "same-origin" always;
+
+    # Proxy to WireGuard Easy
+    location / {
+        proxy_pass http://wg-easy:51821;
+        proxy_http_version 1.1;
+        
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Access and error logs
+    access_log /var/log/nginx/wg-easy-access.log;
+    error_log /var/log/nginx/wg-easy-error.log;
+}
+```
+
+<Warning>
+  Replace `wg-easy.example.com` with your actual domain name.
+</Warning>
+
+### Create Docker Compose file
+
+Create `compose.yml` for Nginx and Certbot:
+
+```yaml compose.yml
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - nginx
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - certbot
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - ./ssl:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  nginx:
+    name: nginx
+
+volumes:
+  nginx_logs:
+```
+
+### Obtain SSL certificate
+
+Before starting Nginx, obtain an SSL certificate from Let's Encrypt.
+
+First, create a temporary Nginx configuration for the ACME challenge:
+
+```nginx conf.d/wg-easy.conf
+server {
+    listen 80;
+    listen [::]:80;
+    server_name wg-easy.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+}
+```
+
+Start only Nginx temporarily:
+
+```bash
+docker compose up -d nginx
+```
+
+Obtain the certificate:
+
+```bash
+docker compose run --rm certbot certonly --webroot \
+  --webroot-path=/var/www/certbot \
+  --email mail@example.com \
+  --agree-tos \
+  --no-eff-email \
+  -d wg-easy.example.com
+```
+
+Now restore the full Nginx configuration from step 2 and restart:
+
+```bash
+docker compose restart nginx
+```
+
+### Start Nginx
+
+Start the full stack:
+
+```bash
+docker compose up -d
+```
+
+### Configure WireGuard Easy
+
+Update your WireGuard Easy `compose.yml` to connect to the Nginx network:
+
+```yaml
+services:
+  wg-easy:
+    container_name: wg-easy
+    image: ghcr.io/wg-easy/wg-easy:latest
+    environment:
+      - WG_HOST=wg-easy.example.com
+      - PORT=51821
+    ports:
+      # Only expose WireGuard UDP port
+      - "51820:51820/udp"
+      # Remove HTTP port - Nginx handles it
+    networks:
+      - nginx
+    # ... rest of your configuration
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - wg-easy:/etc/wireguard
+
+networks:
+  nginx:
+    external: true
+
+volumes:
+  wg-easy:
+```
+
+### Restart WireGuard Easy
+
+Restart WireGuard Easy to apply changes:
+
+```bash
+docker compose up -d
+```
+
+</Steps>
+
+  </Tab>
+  <Tab title="Host Installation">
+
+<Steps>
+
+### Install Nginx and Certbot
+
+Install Nginx and Certbot on your host system:
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install nginx certbot python3-certbot-nginx
+
+# CentOS/RHEL
+sudo yum install epel-release
+sudo yum install nginx certbot python3-certbot-nginx
+
+# Fedora
+sudo dnf install nginx certbot python3-certbot-nginx
+```
+
+### Create Nginx configuration
+
+Create a configuration file:
+
+```nginx /etc/nginx/sites-available/wg-easy
+server {
+    listen 80;
+    listen [::]:80;
+    server_name wg-easy.example.com;
+    
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name wg-easy.example.com;
+
+    # Certbot will populate these
+    ssl_certificate /etc/letsencrypt/live/wg-easy.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/wg-easy.example.com/privkey.pem;
+
+    # SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location / {
+        # Proxy to WireGuard Easy
+        # Use host IP since it's running in Docker
+        proxy_pass http://127.0.0.1:51821;
+        proxy_http_version 1.1;
+        
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    access_log /var/log/nginx/wg-easy-access.log;
+    error_log /var/log/nginx/wg-easy-error.log;
+}
+```
+
+### Enable the site
+
+```bash
+# Create symlink
+sudo ln -s /etc/nginx/sites-available/wg-easy /etc/nginx/sites-enabled/
+
+# Test configuration
+sudo nginx -t
+
+# Reload Nginx
+sudo systemctl reload nginx
+```
+
+### Obtain SSL certificate
+
+Use Certbot to obtain and configure SSL:
+
+```bash
+sudo certbot --nginx -d wg-easy.example.com
+```
+
+Certbot will automatically update your Nginx configuration.
+
+### Configure WireGuard Easy
+
+Update your WireGuard Easy `compose.yml` to expose the HTTP port on localhost:
+
+```yaml
+services:
+  wg-easy:
+    environment:
+      - WG_HOST=wg-easy.example.com
+      - PORT=51821
+    ports:
+      - "127.0.0.1:51821:51821/tcp"  # Bind to localhost only
+      - "51820:51820/udp"
+    # ... rest of configuration
+```
+
+### Restart services
+
+```bash
+# Restart WireGuard Easy
+docker compose up -d
+
+# Verify Nginx
+sudo systemctl status nginx
+```
+
+</Steps>
+
+  </Tab>
+</Tabs>
+
+## Verify setup
+
+Your WireGuard Easy instance should now be accessible at `https://wg-easy.example.com`.
+
+To verify:
+
+1. Visit `https://wg-easy.example.com` in your browser
+2. Check that the connection is secure (lock icon)
+3. Verify HTTP to HTTPS redirect works
+4. Test certificate: `https://www.ssllabs.com/ssltest/`
+
+## Advanced configuration
+
+### Rate limiting
+
+Protect against brute force attacks:
+
+```nginx
+http {
+    # Define rate limit zone
+    limit_req_zone $binary_remote_addr zone=wg_easy:10m rate=10r/m;
+    
+    server {
+        # Apply rate limit
+        location / {
+            limit_req zone=wg_easy burst=5 nodelay;
+            proxy_pass http://wg-easy:51821;
+        }
+    }
+}
+```
+
+### IP whitelisting
+
+Restrict access to specific IPs:
+
+```nginx
+server {
+    # Allow specific IPs
+    allow 192.168.1.0/24;
+    allow 10.0.0.0/8;
+    deny all;
+    
+    location / {
+        proxy_pass http://wg-easy:51821;
+    }
+}
+```
+
+### Basic authentication
+
+Add an authentication layer:
+
+```bash
+# Create password file
+sudo apt install apache2-utils
+sudo htpasswd -c /etc/nginx/.htpasswd username
+```
+
+```nginx
+server {
+    location / {
+        auth_basic "Restricted Access";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        
+        proxy_pass http://wg-easy:51821;
+    }
+}
+```
+
+### Custom error pages
+
+Create custom error pages:
+
+```nginx
+server {
+    error_page 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+    }
+}
+```
+
+### Logging
+
+Customize access logs:
+
+```nginx
+http {
+    log_format detailed '$remote_addr - $remote_user [$time_local] '
+                       '"$request" $status $body_bytes_sent '
+                       '"$http_referer" "$http_user_agent" '
+                       '$request_time';
+                       
+    access_log /var/log/nginx/wg-easy-access.log detailed;
+}
+```
+
+### Caching
+
+Enable caching for static assets:
+
+```nginx
+server {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        proxy_pass http://wg-easy:51821;
+        proxy_cache_valid 200 7d;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+}
+```
+
+### HTTP/3 support
+
+Enable HTTP/3 (QUIC) with Nginx 1.25+:
+
+```nginx
+server {
+    listen 443 quic reuseport;
+    listen 443 ssl http2;
+    
+    ssl_protocols TLSv1.3;
+    
+    add_header Alt-Svc 'h3=":443"; ma=86400';
+}
+```
+
+## Troubleshooting
+
+### Certificate errors
+
+If Certbot fails:
+
+1. Verify domain DNS points to your server
+2. Ensure ports 80 and 443 are open
+3. Check Nginx is running: `sudo systemctl status nginx`
+4. Review Certbot logs: `sudo certbot certificates`
+
+### Connection refused
+
+If you can't connect:
+
+```bash
+# Test Nginx configuration
+sudo nginx -t
+
+# Check if Nginx is running
+sudo systemctl status nginx
+
+# Verify port binding
+sudo netstat -tlnp | grep nginx
+
+# Check WireGuard Easy
+docker logs wg-easy
+
+# Test backend connection
+curl http://localhost:51821
+```
+
+### 502 Bad Gateway
+
+If you see 502 errors:
+
+1. Verify WireGuard Easy is running: `docker ps`
+2. Check container network connectivity
+3. Verify proxy_pass URL is correct
+4. Review Nginx error logs: `sudo tail -f /var/log/nginx/error.log`
+
+### SSL errors
+
+For SSL/TLS issues:
+
+```bash
+# Test SSL configuration
+sudo nginx -t
+
+# Verify certificate paths
+sudo ls -la /etc/letsencrypt/live/wg-easy.example.com/
+
+# Check certificate expiration
+sudo certbot certificates
+
+# Test SSL connection
+openssl s_client -connect wg-easy.example.com:443
+```
+
+## Certificate renewal
+
+### Docker-based
+
+Certbot container automatically renews certificates. To manually renew:
+
+```bash
+docker compose run --rm certbot renew
+docker compose restart nginx
+```
+
+### Host-based
+
+Certbot creates a systemd timer for automatic renewal. To manually renew:
+
+```bash
+sudo certbot renew
+sudo systemctl reload nginx
+```
+
+Verify renewal timer:
+
+```bash
+sudo systemctl list-timers | grep certbot
+```
+
+## Security considerations
+
+<Warning>
+  **Important security practices:**
+  
+  - Always use HTTPS in production
+  - Keep Nginx and Certbot updated
+  - Use strong SSL/TLS configurations
+  - Enable security headers (HSTS, CSP, etc.)
+  - Implement rate limiting
+  - Consider fail2ban for brute force protection
+  - Regularly review access logs
+  - Use firewall rules to restrict access
+  - Keep certificates renewed
+</Warning>
+
+### SSL best practices
+
+1. **Use TLS 1.2 and 1.3 only**
+2. **Enable HSTS** with a long max-age
+3. **Implement OCSP stapling**
+4. **Use strong cipher suites**
+5. **Disable SSL compression**
+6. **Test with SSL Labs**: https://www.ssllabs.com/ssltest/
+
+### Firewall configuration
+
+Configure your firewall:
+
+```bash
+# UFW (Ubuntu)
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 51820/udp
+
+# FirewallD (CentOS/RHEL)
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --permanent --add-port=51820/udp
+sudo firewall-cmd --reload
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment-variables">
+    Configure WireGuard Easy settings
+  </Card>
+  <Card title="Web UI" icon="browser" href="/features/web-ui">
+    Learn about the web interface
+  </Card>
+  <Card title="Security" icon="shield" href="/advanced/security">
+    Harden your deployment
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting/common-issues">
+    Fix common issues
+  </Card>
+</CardGroup>

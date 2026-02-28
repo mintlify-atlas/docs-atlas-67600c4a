@@ -1,0 +1,141 @@
+---
+title: WireGuard Easy - The Easiest Way to Run WireGuard VPN
+description: All-in-one WireGuard VPN solution with a powerful web UI for managing clients, viewing statistics, and configuring your VPN server.
+---
+
+# Welcome to WireGuard Easy
+
+You have found the easiest way to install & manage WireGuard on any Linux host!
+
+WireGuard Easy is an all-in-one solution that combines WireGuard VPN with a modern, intuitive web-based management interface. Whether you're setting up a personal VPN or managing multiple clients, WireGuard Easy simplifies the entire process.
+
+## Why WireGuard Easy?
+
+<CardGroup cols={2}>
+  <Card title="Simple Setup" icon="rocket">
+    Deploy your VPN server in minutes with Docker Compose. No complex configuration required.
+  </Card>
+  
+  <Card title="Web-Based Management" icon="browser">
+    Manage all your VPN clients through an intuitive web interface with automatic light/dark mode.
+  </Card>
+  
+  <Card title="Complete Client Control" icon="users">
+    Create, edit, delete, enable/disable clients with ease. Download configs or scan QR codes.
+  </Card>
+  
+  <Card title="Real-Time Monitoring" icon="chart-line">
+    View connection statistics, Tx/Rx charts, and see which clients are currently connected.
+  </Card>
+  
+  <Card title="Modern Features" icon="sparkles">
+    Support for IPv6, 2FA authentication, client expiration, one-time links, and Prometheus metrics.
+  </Card>
+  
+  <Card title="Multi-Language" icon="globe">
+    Available in multiple languages with Gravatar support and CIDR configuration.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+WireGuard Easy packs powerful features into an easy-to-use package:
+
+- **All-in-one**: WireGuard + Web UI in a single container
+- **Easy installation**: Simple to deploy and even simpler to use
+- **Full client management**: List, create, edit, delete, enable & disable clients
+- **QR code generation**: Show a client's QR code for easy mobile setup
+- **Configuration download**: Download client configuration files
+- **Connection statistics**: See which clients are connected in real-time
+- **Bandwidth monitoring**: Tx/Rx charts for each connected client
+- **Gravatar support**: Personalize your interface
+- **Automatic theming**: Light / Dark Mode based on system preferences
+- **Multilanguage support**: Use WireGuard Easy in your preferred language
+- **One-time links**: Share temporary access links
+- **Client expiration**: Automatically disable clients after a set date
+- **Prometheus metrics**: Monitor your VPN with industry-standard metrics
+- **IPv6 support**: Full IPv6 compatibility
+- **CIDR support**: Flexible network configuration
+- **2FA support**: Enhanced security with two-factor authentication
+
+## Quick Start
+
+Get up and running in just a few steps:
+
+<Steps>
+  <Step title="Install Docker">
+    Install Docker on your Linux host:
+    
+    ```bash
+    curl -sSL https://get.docker.com | sh
+    ```
+  </Step>
+  
+  <Step title="Deploy WireGuard Easy">
+    Download and start WireGuard Easy with Docker Compose:
+    
+    ```bash
+    sudo mkdir -p /etc/docker/containers/wg-easy
+    sudo curl -o /etc/docker/containers/wg-easy/docker-compose.yml \
+      https://raw.githubusercontent.com/wg-easy/wg-easy/master/docker-compose.yml
+    cd /etc/docker/containers/wg-easy
+    sudo docker compose up -d
+    ```
+  </Step>
+  
+  <Step title="Access Web UI">
+    Open your browser and navigate to `http://your-server-ip:51821` to complete the setup wizard.
+  </Step>
+  
+  <Step title="Create Your First Client">
+    Use the web interface to create your first VPN client and download the configuration or scan the QR code.
+  </Step>
+</Steps>
+
+<Note>
+For production deployments, it's strongly recommended to set up a reverse proxy with HTTPS. See our [Getting Started](/getting-started) guide for detailed instructions.
+</Note>
+
+## Supported Architectures
+
+WireGuard Easy supports the following architectures:
+
+- **x86_64** (amd64)
+- **arm64** (aarch64)
+
+## Container Registries
+
+WireGuard Easy images are available from:
+
+- **GitHub Container Registry**: `ghcr.io/wg-easy/wg-easy`
+- **Codeberg Container Registry**: `codeberg.org/wg-easy/wg-easy` (IPv6 support)
+
+<Tip>
+Use version tags like `15` instead of `latest` to avoid breaking changes. Pin to the latest major version for automatic updates without breaking changes.
+</Tip>
+
+## Community & Support
+
+WireGuard Easy is an open-source project with over 12 million+ image pulls and an active community.
+
+- **GitHub Repository**: [github.com/wg-easy/wg-easy](https://github.com/wg-easy/wg-easy)
+- **License**: AGPL-3.0-only
+- **Issues & Discussions**: Open issues or start discussions on GitHub
+
+<Warning>
+This project is not affiliated with, associated with, authorized by, endorsed by, or in any way officially connected with Jason A. Donenfeld, ZX2C4, or Edge Security. "WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld.
+</Warning>
+
+## Next Steps
+
+Ready to get started? Check out these resources:
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="play" href="/getting-started">
+    Follow our comprehensive guide to deploy WireGuard Easy
+  </Card>
+  
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed installation instructions with prerequisites
+  </Card>
+</CardGroup>

@@ -1,0 +1,231 @@
+---
+title: Client Management
+description: Comprehensive guide to managing WireGuard clients including creation, editing, and deletion
+---
+
+WireGuard Easy provides a powerful interface for managing VPN clients with features like search, sorting, batch operations, and detailed configuration options.
+
+## Creating a New Client
+
+Add new WireGuard clients through the web interface in just a few steps.
+
+<Steps>
+  <Step title="Open the Create Dialog">
+    Click the "New Client" button in the top right of the clients page to open the creation dialog.
+  </Step>
+  
+  <Step title="Configure Client Details">
+    Enter the client name and optionally set an expiration date:
+    - **Name**: A descriptive identifier for the client (e.g., "John's Laptop")
+    - **Expiration Date**: Optional date when the client configuration expires
+  </Step>
+  
+  <Step title="Create the Client">
+    Click "Create" to generate the client configuration. The system automatically assigns:
+    - IPv4 and IPv6 addresses from the configured subnet
+    - Public/private key pair
+    - Default configuration values
+  </Step>
+</Steps>
+
+<Note>
+Clients are automatically enabled upon creation. You can disable them later using the toggle switch on the client card.
+</Note>
+
+## Managing Existing Clients
+
+### Viewing Client Information
+
+Each client card displays essential information:
+
+- **Status Indicator**: Visual avatar showing online/offline state
+- **Name**: Client identifier
+- **IP Addresses**: Both IPv4 and IPv6 addresses
+- **Last Seen**: Time since last connection
+- **Data Transfer**: Real-time upload/download statistics
+- **Expiration Date**: If configured, displays when the client expires
+
+### Searching and Sorting
+
+Efficiently locate clients in large deployments:
+
+<Tabs>
+  <Tab title="Search">
+    Use the search bar to filter clients by name:
+    ```
+    Type any part of the client name to filter the list
+    ```
+    The search updates in real-time with a 300ms debounce for optimal performance.
+  </Tab>
+  
+  <Tab title="Sort">
+    Toggle between ascending and descending sort order:
+    - Click the sort button to change ordering
+    - Sort order persists across sessions
+  </Tab>
+</Tabs>
+
+### Enabling and Disabling Clients
+
+Control client access without deleting configurations:
+
+1. Locate the client card
+2. Toggle the switch in the top right of the card
+3. Disabled clients cannot connect to the VPN
+
+<Info>
+Disabling a client immediately revokes access but preserves all configuration settings. This is useful for temporary suspensions.
+</Info>
+
+## Editing Client Configuration
+
+Click the edit icon on any client card to access the detailed configuration page.
+
+### General Settings
+
+```yaml
+Name: Client identifier
+Enabled: Enable/disable client access
+Expiration Date: Optional expiry date
+```
+
+### Network Configuration
+
+<Tabs>
+  <Tab title="IP Addresses">
+    **IPv4 Address**: Client's IPv4 address in the VPN subnet
+    
+    **IPv6 Address**: Client's IPv6 address in the VPN subnet
+    
+    **Endpoint**: Read-only field showing the client's current connection endpoint
+  </Tab>
+  
+  <Tab title="Allowed IPs">
+    **Client Allowed IPs**: Networks accessible through the VPN from the client's perspective
+    
+    Default: `0.0.0.0/0, ::/0` (all traffic through VPN)
+    
+    **Server Allowed IPs**: Networks the server routes to this specific client
+    
+    This controls which traffic the server forwards to the client.
+  </Tab>
+  
+  <Tab title="DNS Settings">
+    Configure DNS servers for the client:
+    ```
+    Example: 1.1.1.1, 8.8.8.8
+    ```
+    Leave empty to use the default DNS configuration.
+  </Tab>
+</Tabs>
+
+### Advanced Settings
+
+<AccordionGroup>
+  <Accordion title="MTU (Maximum Transmission Unit)">
+    Configure the maximum packet size:
+    ```
+    Default: 1420 bytes
+    Range: 1280-1500
+    ```
+    Adjust if experiencing connection issues or for specific network requirements.
+  </Accordion>
+  
+  <Accordion title="Persistent Keepalive">
+    Send keepalive packets to maintain connection:
+    ```
+    Default: 0 (disabled)
+    Recommended: 25 seconds
+    ```
+    Enable for clients behind NAT or strict firewalls.
+  </Accordion>
+  
+  <Accordion title="Obfuscation Parameters (AmneziaWG)">
+    If using AmneziaWG, configure obfuscation settings:
+    
+    - **jC**: Junk packet count
+    - **jMin/jMax**: Junk packet size range
+    - **i1-i5**: Init packet parameters
+    
+    <Warning>
+    These settings require AmneziaWG to be enabled on the server.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+### WireGuard Hooks
+
+Execute custom scripts at different lifecycle stages:
+
+- **PreUp**: Before the interface comes up
+- **PostUp**: After the interface comes up
+- **PreDown**: Before the interface goes down
+- **PostDown**: After the interface goes down
+
+<Tip>
+Leave empty to use the global hooks configuration from the server settings.
+</Tip>
+
+## Deleting Clients
+
+Permanently remove a client configuration:
+
+<Steps>
+  <Step title="Navigate to Client Editor">
+    Click the edit icon on the client card to open the configuration page.
+  </Step>
+  
+  <Step title="Open Delete Dialog">
+    Scroll to the bottom and click the "Delete" button.
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Review the confirmation dialog and confirm to permanently delete the client.
+  </Step>
+</Steps>
+
+<Warning>
+Deleting a client is permanent and cannot be undone. The client will immediately lose VPN access and all configuration will be removed.
+</Warning>
+
+## Real-Time Updates
+
+The client list automatically refreshes every second to display:
+
+- Current connection status
+- Latest data transfer statistics
+- Updated last seen timestamps
+- Traffic charts (if enabled)
+
+<Info>
+The refresh interval can be adjusted in future versions. For now, it provides near real-time monitoring of your VPN infrastructure.
+</Info>
+
+## Best Practices
+
+1. **Naming Convention**: Use descriptive names that identify both the user and device (e.g., "alice-laptop", "bob-phone")
+2. **Expiration Dates**: Set expiration dates for temporary access (contractors, guests)
+3. **Regular Audits**: Periodically review and disable unused clients
+4. **IP Address Management**: Keep track of assigned IPs to avoid conflicts
+5. **Persistent Keepalive**: Enable for mobile clients and those behind NAT
+
+## Troubleshooting
+
+### Client Can't Connect
+
+- Verify the client is enabled (toggle switch is on)
+- Check if the client has expired
+- Ensure the server is running and accessible
+- Verify firewall rules allow WireGuard traffic
+
+### No Data Transfer Shown
+
+- Enable charts in the header menu
+- Verify the client is actively transmitting data
+- Check that statistics collection is enabled on the server
+
+### IP Address Conflicts
+
+- Use the automatic IP assignment feature
+- Manually verify no duplicate IPs exist
+- Check the interface CIDR configuration in admin settings

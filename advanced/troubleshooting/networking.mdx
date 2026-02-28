@@ -1,0 +1,535 @@
+---
+title: Network Troubleshooting
+description: Diagnose and fix networking issues including port forwarding, firewall rules, and connectivity problems
+---
+
+This guide helps you diagnose and resolve networking issues with WireGuard Easy, covering port forwarding, firewall configuration, and connectivity problems.
+
+## Port Configuration
+
+### Required Ports
+
+WireGuard Easy requires the following ports to be accessible:
+
+| Port  | Protocol | Purpose           | Configurable |
+|-------|----------|-------------------|-------------|
+| 51820 | UDP      | WireGuard VPN     | Yes (WG_PORT) |
+| 51821 | TCP      | Web UI            | Yes (PORT)    |
+
+<Warning>
+  The WireGuard port (51820) **must** be accessible from the internet for clients to connect. The Web UI port (51821) should only be exposed if you're not using a reverse proxy.
+</Warning>
+
+### Verify Port Availability
+
+Before starting WireGuard Easy, verify the ports are not already in use:
+
+```bash
+# Check if ports are available
+sudo netstat -tulpn | grep -E '51820|51821'
+
+# Alternative using ss
+sudo ss -tulpn | grep -E '51820|51821'
+
+# Check what process is using a specific port
+sudo lsof -i :51820
+```
+
+If a port is in use, either:
+1. Stop the conflicting service
+2. Configure WireGuard Easy to use different ports
+
+### Change Default Ports
+
+Edit your `docker-compose.yml`:
+
+```yaml
+environment:
+  - PORT=8080          # Change Web UI port
+  - WG_PORT=51820      # Change WireGuard port
+
+ports:
+  - "8080:8080"        # Map new Web UI port
+  - "51820:51820/udp"  # Map WireGuard port
+```
+
+## Firewall Configuration
+
+### Linux Firewall (UFW)
+
+If you're using UFW (Uncomplicated Firewall):
+
+```bash
+# Allow WireGuard VPN port
+sudo ufw allow 51820/udp
+
+# Allow Web UI port (only if not using reverse proxy)
+sudo ufw allow 51821/tcp
+
+# Check firewall status
+sudo ufw status
+
+# Enable UFW if disabled
+sudo ufw enable
+```
+
+### Linux Firewall (firewalld)
+
+For systems using firewalld (RHEL, CentOS, Fedora):
+
+```bash
+# Allow WireGuard port
+sudo firewall-cmd --permanent --add-port=51820/udp
+
+# Allow Web UI port
+sudo firewall-cmd --permanent --add-port=51821/tcp
+
+# Reload firewall
+sudo firewall-cmd --reload
+
+# Verify rules
+sudo firewall-cmd --list-all
+```
+
+### iptables Rules
+
+If you manage iptables directly:
+
+```bash
+# Allow WireGuard UDP traffic
+sudo iptables -A INPUT -p udp --dport 51820 -j ACCEPT
+
+# Allow Web UI TCP traffic
+sudo iptables -A INPUT -p tcp --dport 51821 -j ACCEPT
+
+# Save rules (Debian/Ubuntu)
+sudo netfilter-persistent save
+
+# Save rules (RHEL/CentOS)
+sudo service iptables save
+```
+
+<Note>
+  WireGuard Easy manages its own NAT rules internally. You don't need to manually configure NAT unless you have specific requirements.
+</Note>
+
+### Cloud Provider Firewalls
+
+#### AWS Security Groups
+
+1. Navigate to EC2 → Security Groups
+2. Select your instance's security group
+3. Add Inbound Rules:
+   - Type: Custom UDP, Port: 51820, Source: 0.0.0.0/0
+   - Type: Custom TCP, Port: 51821, Source: Your IP (or 0.0.0.0/0 if using reverse proxy)
+
+#### Google Cloud Platform
+
+```bash
+# Create firewall rule for WireGuard
+gcloud compute firewall-rules create allow-wireguard \
+  --allow udp:51820 \
+  --source-ranges 0.0.0.0/0
+
+# Create firewall rule for Web UI (if needed)
+gcloud compute firewall-rules create allow-wg-easy-ui \
+  --allow tcp:51821 \
+  --source-ranges YOUR_IP/32
+```
+
+#### Azure
+
+```bash
+# Create NSG rule for WireGuard
+az network nsg rule create \
+  --resource-group myResourceGroup \
+  --nsg-name myNSG \
+  --name allow-wireguard \
+  --priority 1000 \
+  --source-address-prefixes '*' \
+  --destination-port-ranges 51820 \
+  --protocol Udp \
+  --access Allow
+```
+
+## Port Forwarding
+
+### Router Port Forwarding
+
+If WireGuard Easy is behind a router/NAT:
+
+1. **Find your server's local IP:**
+   ```bash
+   ip addr show
+   # or
+   hostname -I
+   ```
+
+2. **Access your router's admin panel** (common addresses):
+   - `192.168.1.1`
+   - `192.168.0.1`
+   - `10.0.0.1`
+
+3. **Configure port forwarding:**
+   - External Port: 51820
+   - Internal Port: 51820
+   - Protocol: UDP
+   - Internal IP: Your server's local IP
+
+4. **Verify forwarding:**
+   ```bash
+   # Test from outside your network
+   nc -vzu YOUR_PUBLIC_IP 51820
+   ```
+
+<Warning>
+  Make sure to use your **public IP address** in the `WG_HOST` environment variable, not your local IP.
+</Warning>
+
+### Find Your Public IP
+
+```bash
+# Method 1: Using curl
+curl ifconfig.me
+
+# Method 2: Using dig
+dig +short myip.opendns.com @resolver1.opendns.com
+
+# Method 3: Using wget
+wget -qO- ifconfig.me
+```
+
+## Connectivity Troubleshooting
+
+### Client Cannot Connect
+
+**Diagnostic steps:**
+
+```bash
+# 1. Verify WireGuard is running
+sudo docker compose ps
+
+# 2. Check if port is listening
+sudo netstat -ulpn | grep 51820
+
+# 3. Check WireGuard status
+sudo docker compose exec wg-easy wg show
+
+# 4. Check container logs
+sudo docker compose logs -f wg-easy
+
+# 5. Test connectivity from client
+ping YOUR_PUBLIC_IP
+nc -vzu YOUR_PUBLIC_IP 51820
+```
+
+**Common causes:**
+
+1. **Firewall blocking traffic** - See firewall configuration above
+2. **Wrong WG_HOST** - Must be your public IP or domain
+3. **Port forwarding not configured** - See port forwarding section
+4. **ISP blocking UDP traffic** - Contact ISP or try different port
+
+### Check WG_HOST Configuration
+
+```bash
+# View current configuration
+sudo docker compose config | grep WG_HOST
+
+# Test DNS resolution (if using domain)
+nslookup your-domain.com
+
+# Verify it resolves to correct IP
+dig +short your-domain.com
+```
+
+### Client Connects but No Internet
+
+**Diagnostic steps:**
+
+```bash
+# 1. Check NAT is working
+sudo docker compose exec wg-easy iptables -t nat -L -n -v
+
+# 2. Verify IP forwarding is enabled
+sudo docker compose exec wg-easy cat /proc/sys/net/ipv4/ip_forward
+# Should output: 1
+
+# 3. Check client routing
+# On client, verify default route points to VPN
+ip route
+
+# 4. Test DNS resolution from client
+nslookup google.com
+```
+
+**Solutions:**
+
+1. **Enable IP forwarding in container:**
+   ```yaml
+   # docker-compose.yml
+   sysctls:
+     - net.ipv4.ip_forward=1
+     - net.ipv6.conf.all.forwarding=1
+   ```
+
+2. **Check client AllowedIPs:**
+   - For full tunnel: `0.0.0.0/0, ::/0`
+   - For split tunnel: specific subnets only
+
+3. **Verify DNS configuration:**
+   - Client should use WireGuard DNS server
+   - Check DNS setting in client config
+
+### Intermittent Disconnections
+
+**Possible causes:**
+
+1. **Keepalive not set:**
+   ```bash
+   # Check client config has PersistentKeepalive
+   PersistentKeepalive = 25
+   ```
+
+2. **NAT timeout on router:**
+   - Reduce PersistentKeepalive to 15-20 seconds
+
+3. **Network changes:**
+   - Mobile clients switching between WiFi/cellular
+   - WireGuard should reconnect automatically
+
+### Slow Connection Speeds
+
+**Diagnostic steps:**
+
+```bash
+# 1. Test speed without VPN
+speedtest-cli
+
+# 2. Test speed with VPN
+# Run speedtest on client while connected
+
+# 3. Check MTU settings
+# On client:
+ip link show <wg-interface>
+
+# 4. Monitor bandwidth
+sudo docker stats wg-easy
+
+# 5. Check for packet loss
+# On client:
+ping -c 100 10.8.0.1
+```
+
+**Solutions:**
+
+1. **Adjust MTU:**
+   ```conf
+   # In client config
+   [Interface]
+   MTU = 1420
+   ```
+
+2. **Check server CPU:**
+   - WireGuard encryption is CPU-intensive
+   - Monitor with `docker stats`
+
+3. **Optimize network path:**
+   - Ensure WG_HOST points to closest/fastest server
+   - Consider server location
+
+## IPv6 Issues
+
+### IPv6 Not Working
+
+**Check if IPv6 is enabled:**
+
+```bash
+# Check environment variable
+sudo docker compose config | grep DISABLE_IPV6
+
+# Should be false or not set
+```
+
+**Verify IPv6 connectivity:**
+
+```bash
+# On host
+ping6 google.com
+
+# Check IPv6 address
+ip -6 addr show
+
+# Test IPv6 from client
+ping6 2001:4860:4860::8888
+```
+
+**Disable IPv6 if not needed:**
+
+```yaml
+# docker-compose.yml
+environment:
+  - DISABLE_IPV6=true
+```
+
+<Note>
+  Disabling IPv6 prevents creation of IPv6 firewall rules and won't assign IPv6 addresses to clients, but you may still see IPv6 addresses in the Web UI (they won't be used).
+</Note>
+
+## Advanced Diagnostics
+
+### Packet Capture
+
+Capture WireGuard traffic for analysis:
+
+```bash
+# Capture on WireGuard interface
+sudo docker compose exec wg-easy tcpdump -i wg0 -w /tmp/wg-capture.pcap
+
+# Capture UDP traffic on port 51820
+sudo tcpdump -i any -n udp port 51820 -w wireguard-traffic.pcap
+
+# Analyze with Wireshark
+wireshark wireguard-traffic.pcap
+```
+
+### Check Routing Table
+
+```bash
+# On server
+sudo docker compose exec wg-easy ip route show
+
+# On client (while connected)
+ip route show
+ip route get 8.8.8.8
+```
+
+### Test DNS Resolution
+
+```bash
+# From client while connected to VPN
+nslookup google.com
+dig google.com
+
+# Test specific DNS server
+nslookup google.com 8.8.8.8
+```
+
+### Monitor WireGuard Statistics
+
+```bash
+# Show detailed WireGuard stats
+sudo docker compose exec wg-easy wg show all
+
+# Watch stats in real-time
+watch -n 1 'sudo docker compose exec wg-easy wg show'
+
+# Check transfer statistics
+sudo docker compose exec wg-easy wg show wg0 transfer
+```
+
+## Network Performance Optimization
+
+### Optimize for Throughput
+
+```yaml
+# docker-compose.yml optimizations
+sysctls:
+  - net.core.rmem_max=2500000
+  - net.core.wmem_max=2500000
+```
+
+### Reduce Latency
+
+1. **Use geographically close server**
+2. **Set appropriate keepalive:**
+   ```conf
+   PersistentKeepalive = 25
+   ```
+3. **Disable unused features in routing**
+
+## Testing Tools
+
+### Essential Network Testing Commands
+
+```bash
+# Test UDP port accessibility
+nc -vzu PUBLIC_IP 51820
+
+# Test TCP port (Web UI)
+nc -vz PUBLIC_IP 51821
+
+# Trace route to server
+traceroute PUBLIC_IP
+
+# MTU discovery
+ping -M do -s 1472 PUBLIC_IP
+
+# DNS lookup
+dig +short your-domain.com
+
+# Speed test
+speedtest-cli
+```
+
+### Online Port Testing Tools
+
+- [CanYouSeeMe.org](https://canyouseeme.org/) - UDP port testing
+- [YouGetSignal](https://www.yougetsignal.com/tools/open-ports/) - Port checking
+- [WireGuard Tools](https://www.wireguard.com/quickstart/) - Official diagnostics
+
+## Common Network Scenarios
+
+### Behind CGNAT (Carrier-Grade NAT)
+
+<Warning>
+  If your ISP uses CGNAT, you cannot host WireGuard Easy on that connection. You'll need:
+  - A VPS with a public IP
+  - IPv6 connectivity (some CGNAT supports IPv6)
+  - A tunneling service like ngrok (not recommended for VPN)
+</Warning>
+
+**Detect CGNAT:**
+```bash
+# Your public IP will be different from your router's WAN IP
+curl ifconfig.me
+# Compare with router's WAN IP
+```
+
+### Dynamic DNS
+
+If your public IP changes frequently:
+
+1. **Set up DDNS service** (No-IP, DuckDNS, etc.)
+2. **Use domain in WG_HOST:**
+   ```yaml
+   environment:
+     - WG_HOST=your-domain.ddns.net
+   ```
+
+### Multiple Network Interfaces
+
+If server has multiple network interfaces:
+
+```bash
+# Specify which interface to use
+# Check available interfaces
+ip addr show
+
+# In docker-compose.yml, bind to specific IP
+ports:
+  - "YOUR_INTERFACE_IP:51820:51820/udp"
+```
+
+## Getting Help
+
+If you're still experiencing network issues after trying these solutions:
+
+1. Check [Common Issues](/advanced/troubleshooting/common-issues)
+2. Review [FAQ](/advanced/troubleshooting/faq)
+3. Search [GitHub Discussions](https://github.com/wg-easy/wg-easy/discussions)
+4. Ask for help with detailed information:
+   - Network topology diagram
+   - Output of diagnostic commands
+   - Relevant logs
+   - Server and client OS details

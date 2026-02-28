@@ -1,0 +1,600 @@
+---
+title: "Podman Deployment"
+description: "Deploy WireGuard Easy using Podman with systemd integration and nftables support"
+---
+
+Podman provides a daemonless alternative to Docker with native systemd integration. This guide covers deploying WireGuard Easy with rootful Podman and nftables.
+
+## Prerequisites
+
+- Podman installed (version 4.4 or higher)
+- Root access to your host
+- nftables firewall support
+- A public IP address or domain name
+- Supported architecture: x86_64 or arm64
+
+<Note>
+  This guide uses rootful Podman. Rootless Podman is not recommended for WireGuard Easy due to networking and capability requirements.
+</Note>
+
+## Quick Start
+
+<Steps>
+  <Step title="Create configuration directories">
+    Create directories for Podman systemd units and persistent data:
+
+    ```bash
+    sudo mkdir -p /etc/containers/systemd/wg-easy
+    sudo mkdir -p /etc/containers/volumes/wg-easy
+    sudo chmod 700 /etc/containers/volumes/wg-easy
+    ```
+  </Step>
+
+  <Step title="Create container configuration">
+    Create `/etc/containers/systemd/wg-easy/wg-easy.container`:
+
+    ```ini
+    [Container]
+    ContainerName=wg-easy
+    Image=ghcr.io/wg-easy/wg-easy:15
+    AutoUpdate=registry
+
+    Volume=/etc/containers/volumes/wg-easy:/etc/wireguard:Z
+    Network=wg-easy.network
+    PublishPort=51820:51820/udp
+    PublishPort=51821:51821/tcp
+
+    # Allow HTTP access (remove when using reverse proxy)
+    Environment=INSECURE=true
+
+    AddCapability=NET_ADMIN
+    AddCapability=SYS_MODULE
+    AddCapability=NET_RAW
+    Sysctl=net.ipv4.ip_forward=1
+    Sysctl=net.ipv4.conf.all.src_valid_mark=1
+    Sysctl=net.ipv6.conf.all.disable_ipv6=0
+    Sysctl=net.ipv6.conf.all.forwarding=1
+    Sysctl=net.ipv6.conf.default.forwarding=1
+
+    [Install]
+    WantedBy=default.target
+    ```
+  </Step>
+
+  <Step title="Create network configuration">
+    Create `/etc/containers/systemd/wg-easy/wg-easy.network`:
+
+    ```ini
+    [Network]
+    NetworkName=wg-easy
+    IPv6=true
+    ```
+  </Step>
+
+  <Step title="Load kernel modules">
+    Create `/etc/modules-load.d/wg-easy.conf`:
+
+    ```txt
+    wireguard
+    nft_masq
+    ```
+
+    Load modules immediately:
+
+    ```bash
+    sudo modprobe wireguard
+    sudo modprobe nft_masq
+    ```
+  </Step>
+
+  <Step title="Start the container">
+    Reload systemd and start the service:
+
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl start wg-easy
+    sudo systemctl enable wg-easy
+    ```
+  </Step>
+
+  <Step title="Configure nftables hooks">
+    Access the Web UI at `http://YOUR_SERVER_IP:51821` and complete the initial setup.
+
+    Then, go to the **Hooks** tab in the Admin Panel and add:
+
+    **PostUp Hook:**
+    ```bash
+    nft add table inet wg_table; nft add chain inet wg_table prerouting { type nat hook prerouting priority 100 \; }; nft add chain inet wg_table postrouting { type nat hook postrouting priority 100 \; }; nft add rule inet wg_table postrouting ip saddr {{ipv4Cidr}} oifname {{device}} masquerade; nft add rule inet wg_table postrouting ip6 saddr {{ipv6Cidr}} oifname {{device}} masquerade; nft add chain inet wg_table input { type filter hook input priority 0 \; policy accept \; }; nft add rule inet wg_table input udp dport {{port}} accept; nft add rule inet wg_table input tcp dport {{uiPort}} accept; nft add chain inet wg_table forward { type filter hook forward priority 0 \; policy accept \; }; nft add rule inet wg_table forward iifname "wg0" accept; nft add rule inet wg_table forward oifname "wg0" accept;
+    ```
+
+    **PostDown Hook:**
+    ```bash
+    nft delete table inet wg_table
+    ```
+  </Step>
+
+  <Step title="Restart to apply hooks">
+    ```bash
+    sudo systemctl restart wg-easy
+    ```
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+### Container Unit File
+
+Here's a comprehensive container configuration with all options:
+
+```ini /etc/containers/systemd/wg-easy/wg-easy.container
+[Unit]
+Description=WireGuard Easy VPN Server
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=wg-easy
+Image=ghcr.io/wg-easy/wg-easy:15
+AutoUpdate=registry
+
+# Volumes
+Volume=/etc/containers/volumes/wg-easy:/etc/wireguard:Z
+Volume=/lib/modules:/lib/modules:ro
+
+# Network
+Network=wg-easy.network
+PublishPort=51820:51820/udp
+PublishPort=51821:51821/tcp
+
+# Environment Variables
+Environment=PORT=51821
+Environment=HOST=0.0.0.0
+Environment=INSECURE=false
+Environment=DISABLE_IPV6=false
+
+# Capabilities (NET_RAW required for Podman)
+AddCapability=NET_ADMIN
+AddCapability=SYS_MODULE
+AddCapability=NET_RAW
+
+# Kernel Parameters
+Sysctl=net.ipv4.ip_forward=1
+Sysctl=net.ipv4.conf.all.src_valid_mark=1
+Sysctl=net.ipv6.conf.all.disable_ipv6=0
+Sysctl=net.ipv6.conf.all.forwarding=1
+Sysctl=net.ipv6.conf.default.forwarding=1
+
+# Health Check
+HealthCmd=/usr/bin/test -f /etc/wireguard/wg0.conf
+HealthInterval=30s
+HealthRetries=3
+
+# Logging
+LogDriver=journald
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target default.target
+```
+
+### Network Unit File
+
+Advanced network configuration with custom subnets:
+
+```ini /etc/containers/systemd/wg-easy/wg-easy.network
+[Network]
+NetworkName=wg-easy
+Driver=bridge
+IPv6=true
+Internal=false
+
+[Subnet]
+Subnet=10.42.42.0/24
+Gateway=10.42.42.1
+
+[Subnet]
+Subnet=fdcc:ad94:bacf:61a3::/64
+Gateway=fdcc:ad94:bacf:61a3::1
+```
+
+## Environment Variables
+
+<CodeGroup>
+
+```ini Basic Configuration
+Environment=PORT=51821
+Environment=HOST=0.0.0.0
+Environment=INSECURE=false
+Environment=DISABLE_IPV6=false
+```
+
+```ini Unattended Setup
+Environment=INIT_ENABLED=true
+Environment=INIT_USERNAME=admin
+Environment=INIT_PASSWORD=SecureP@ssw0rd
+Environment=INIT_HOST=vpn.example.com
+Environment=INIT_PORT=51820
+Environment=INIT_DNS=1.1.1.1,8.8.8.8
+Environment=INIT_IPV4_CIDR=10.8.0.0/24
+Environment=INIT_IPV6_CIDR=2001:0DB8::/32
+Environment=INIT_ALLOWED_IPS=10.8.0.0/24,2001:0DB8::/32
+```
+
+</CodeGroup>
+
+## nftables Configuration
+
+### Understanding the Hooks
+
+The nftables hooks replace iptables for packet filtering and NAT:
+
+**PostUp Hook** (runs when WireGuard starts):
+- Creates `wg_table` for all WireGuard rules
+- Sets up masquerading for both IPv4 and IPv6
+- Allows inbound traffic on WireGuard and Web UI ports
+- Permits forwarding through the WireGuard interface
+
+**PostDown Hook** (runs when WireGuard stops):
+- Removes the entire `wg_table` and all associated rules
+
+<Note>
+  If you see iptables errors in the logs when using nftables, you can safely ignore them. The hooks above replace iptables functionality.
+</Note>
+
+### Template Variables
+
+The hooks use these template variables (automatically replaced):
+
+- `{{ipv4Cidr}}`: IPv4 CIDR for VPN clients (e.g., `10.8.0.0/24`)
+- `{{ipv6Cidr}}`: IPv6 CIDR for VPN clients (e.g., `fd00::/64`)
+- `{{device}}`: Network interface name (usually `eth0` or `ens3`)
+- `{{port}}`: WireGuard port (default: `51820`)
+- `{{uiPort}}`: Web UI port (default: `51821`)
+
+### Custom nftables Rules
+
+If you need custom firewall rules:
+
+```bash
+# View current rules
+sudo nft list table inet wg_table
+
+# Add custom rule (persists until container restart)
+sudo nft add rule inet wg_table forward ip saddr 10.8.0.0/24 ip daddr 192.168.1.0/24 accept
+```
+
+To make custom rules persistent, add them to the PostUp hook in the Web UI.
+
+## Systemd Management
+
+### Service Commands
+
+```bash
+# Start service
+sudo systemctl start wg-easy
+
+# Stop service
+sudo systemctl stop wg-easy
+
+# Restart service
+sudo systemctl restart wg-easy
+
+# Enable on boot
+sudo systemctl enable wg-easy
+
+# Disable on boot
+sudo systemctl disable wg-easy
+
+# Check status
+sudo systemctl status wg-easy
+
+# View logs
+sudo journalctl -u wg-easy -f
+```
+
+### Auto-Updates
+
+Podman supports automatic image updates:
+
+```bash
+# Enable auto-update timer
+sudo systemctl enable --now podman-auto-update.timer
+
+# Check auto-update status
+sudo systemctl status podman-auto-update.timer
+
+# Manually trigger update check
+sudo podman auto-update
+```
+
+The `AutoUpdate=registry` setting in the container file enables automatic updates when the timer runs.
+
+## Advanced Configurations
+
+### Multiple Networks
+
+Connect to additional networks (e.g., for reverse proxy):
+
+```ini /etc/containers/systemd/wg-easy/wg-easy.container
+[Container]
+Network=wg-easy.network
+Network=traefik.network
+...
+```
+
+### Resource Limits
+
+Limit CPU and memory usage:
+
+```ini
+[Container]
+...
+
+[Service]
+CPUQuota=200%
+MemoryLimit=512M
+MemoryHigh=384M
+```
+
+### Custom DNS
+
+Set custom DNS servers for the container:
+
+```ini
+[Container]
+DNS=1.1.1.1
+DNS=8.8.8.8
+...
+```
+
+### SELinux Contexts
+
+The `:Z` flag on volumes sets proper SELinux labels. For shared volumes, use `:z` (lowercase):
+
+```ini
+Volume=/shared/path:/etc/wireguard:z
+```
+
+## Reverse Proxy Integration
+
+When using a reverse proxy with Podman:
+
+<Steps>
+  <Step title="Connect to reverse proxy network">
+    Add the reverse proxy network to your container config:
+
+    ```ini
+    [Container]
+    Network=wg-easy.network
+    Network=traefik.network
+    ```
+  </Step>
+
+  <Step title="Remove INSECURE flag">
+    ```ini
+    Environment=INSECURE=false
+    ```
+  </Step>
+
+  <Step title="Don't publish Web UI port externally">
+    Only expose WireGuard port:
+
+    ```ini
+    PublishPort=51820:51820/udp
+    # Remove: PublishPort=51821:51821/tcp
+    ```
+  </Step>
+
+  <Step title="Reload and restart">
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl restart wg-easy
+    ```
+  </Step>
+</Steps>
+
+## Backup and Restore
+
+### Backup Configuration
+
+```bash
+# Backup WireGuard configuration
+sudo tar -czf wg-easy-backup-$(date +%Y%m%d).tar.gz \
+  -C /etc/containers/volumes/wg-easy .
+
+# Backup systemd units
+sudo tar -czf wg-easy-systemd-$(date +%Y%m%d).tar.gz \
+  -C /etc/containers/systemd/wg-easy .
+```
+
+### Restore Configuration
+
+```bash
+# Stop service
+sudo systemctl stop wg-easy
+
+# Restore WireGuard configuration
+sudo tar -xzf wg-easy-backup-YYYYMMDD.tar.gz \
+  -C /etc/containers/volumes/wg-easy
+
+# Restore systemd units
+sudo tar -xzf wg-easy-systemd-YYYYMMDD.tar.gz \
+  -C /etc/containers/systemd/wg-easy
+
+# Reload and restart
+sudo systemctl daemon-reload
+sudo systemctl start wg-easy
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Service fails to start">
+    Check the service status and logs:
+
+    ```bash
+    sudo systemctl status wg-easy
+    sudo journalctl -u wg-easy -n 50 --no-pager
+    ```
+
+    Verify container file syntax:
+
+    ```bash
+    podman run --rm -v /etc/containers/systemd/wg-easy:/units:ro \
+      alpine sh -c "cd /units && for f in *.container; do echo Checking $f; cat $f; done"
+    ```
+  </Accordion>
+
+  <Accordion title="NET_RAW capability required">
+    Podman requires the `NET_RAW` capability that Docker doesn't need:
+
+    ```ini
+    AddCapability=NET_RAW
+    ```
+
+    Verify capabilities are granted:
+
+    ```bash
+    podman inspect wg-easy | grep -A 10 CapAdd
+    ```
+  </Accordion>
+
+  <Accordion title="nftables errors">
+    If you see iptables-related errors, ensure nftables modules are loaded:
+
+    ```bash
+    sudo modprobe nft_masq
+    lsmod | grep nft
+    ```
+
+    Verify nftables is installed:
+
+    ```bash
+    sudo nft --version
+    ```
+  </Accordion>
+
+  <Accordion title="SELinux permission denied">
+    Check SELinux context on volume:
+
+    ```bash
+    ls -lZ /etc/containers/volumes/wg-easy
+    ```
+
+    Fix SELinux labels:
+
+    ```bash
+    sudo restorecon -Rv /etc/containers/volumes/wg-easy
+    ```
+
+    Or temporarily set to permissive mode for testing:
+
+    ```bash
+    sudo setenforce 0
+    ```
+  </Accordion>
+
+  <Accordion title="Auto-update not working">
+    Verify auto-update timer is running:
+
+    ```bash
+    sudo systemctl status podman-auto-update.timer
+    ```
+
+    Check last update time:
+
+    ```bash
+    sudo journalctl -u podman-auto-update.service -n 20
+    ```
+
+    Manually trigger update:
+
+    ```bash
+    sudo podman auto-update --dry-run
+    sudo podman auto-update
+    ```
+  </Accordion>
+
+  <Accordion title="Network connectivity issues">
+    Check if network exists:
+
+    ```bash
+    podman network ls
+    podman network inspect wg-easy
+    ```
+
+    Recreate network:
+
+    ```bash
+    sudo systemctl stop wg-easy
+    podman network rm wg-easy
+    sudo systemctl daemon-reload
+    sudo systemctl start wg-easy
+    ```
+  </Accordion>
+
+  <Accordion title="WireGuard module not loading">
+    Ensure WireGuard kernel module is available:
+
+    ```bash
+    sudo modprobe wireguard
+    lsmod | grep wireguard
+    ```
+
+    If not available, install WireGuard:
+
+    ```bash
+    # Debian/Ubuntu
+    sudo apt install wireguard
+
+    # RHEL/CentOS/Fedora
+    sudo dnf install wireguard-tools
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Migration from Docker
+
+To migrate from Docker to Podman:
+
+<Steps>
+  <Step title="Export Docker configuration">
+    ```bash
+    docker inspect wg-easy > docker-config.json
+    ```
+  </Step>
+
+  <Step title="Stop Docker container">
+    ```bash
+    docker stop wg-easy
+    docker rm wg-easy
+    ```
+  </Step>
+
+  <Step title="Copy configuration data">
+    ```bash
+    sudo cp -a /var/lib/docker/volumes/wg-easy/_data/* \
+      /etc/containers/volumes/wg-easy/
+    ```
+  </Step>
+
+  <Step title="Create Podman systemd units">
+    Follow the Quick Start steps above to create container and network files.
+  </Step>
+
+  <Step title="Start with Podman">
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl start wg-easy
+    sudo systemctl enable wg-easy
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Your WireGuard clients will continue working without any changes after migration. Only the container runtime changes.
+</Note>

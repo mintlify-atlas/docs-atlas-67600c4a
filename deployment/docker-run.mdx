@@ -1,0 +1,464 @@
+---
+title: "Docker Run Deployment"
+description: "Deploy WireGuard Easy using docker run command for simple setups"
+---
+
+The `docker run` command provides a straightforward way to deploy WireGuard Easy without Docker Compose. This method is ideal for quick setups, testing, or when you prefer direct command-line control.
+
+## Prerequisites
+
+- Docker Engine installed (version 20.10 or higher)
+- Root or sudo access to your host
+- A public IP address or domain name
+- Supported architecture: x86_64 or arm64
+
+## Quick Start
+
+<Steps>
+  <Step title="Create Docker network">
+    First, create a custom bridge network with IPv4 and IPv6 support:
+
+    ```bash
+    docker network create \
+      -d bridge --ipv6 \
+      --subnet 10.42.42.0/24 \
+      --subnet fdcc:ad94:bacf:61a3::/64 \
+      wg
+    ```
+
+    <Note>
+      This network only needs to be created once. It will persist across container restarts.
+    </Note>
+  </Step>
+
+  <Step title="Create volume directory">
+    Create a directory to store WireGuard configuration:
+
+    ```bash
+    mkdir -p ~/.wg-easy
+    chmod 700 ~/.wg-easy
+    ```
+
+    For system-wide installation, use:
+
+    ```bash
+    sudo mkdir -p /opt/wg-easy
+    sudo chmod 700 /opt/wg-easy
+    ```
+  </Step>
+
+  <Step title="Run the container">
+    Launch WireGuard Easy with the following command:
+
+    ```bash
+    docker run -d \
+      --net wg \
+      --name wg-easy \
+      --ip6 fdcc:ad94:bacf:61a3::2a \
+      --ip 10.42.42.42 \
+      -e INSECURE=true \
+      -v ~/.wg-easy:/etc/wireguard \
+      -v /lib/modules:/lib/modules:ro \
+      -p 51820:51820/udp \
+      -p 51821:51821/tcp \
+      --cap-add NET_ADMIN \
+      --cap-add SYS_MODULE \
+      --sysctl net.ipv4.ip_forward=1 \
+      --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+      --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+      --sysctl net.ipv6.conf.all.forwarding=1 \
+      --sysctl net.ipv6.conf.default.forwarding=1 \
+      --restart unless-stopped \
+      ghcr.io/wg-easy/wg-easy:15
+    ```
+  </Step>
+
+  <Step title="Access the Web UI">
+    Open your browser and navigate to:
+
+    ```
+    http://YOUR_SERVER_IP:51821
+    ```
+
+    <Warning>
+      The `INSECURE=true` flag allows HTTP access. For production, remove this flag and use a reverse proxy with HTTPS.
+    </Warning>
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+Here's a comprehensive `docker run` command with all available options:
+
+```bash
+docker run -d \
+  --net wg \
+  --name wg-easy \
+  --ip6 fdcc:ad94:bacf:61a3::2a \
+  --ip 10.42.42.42 \
+  \
+  # Environment variables
+  -e PORT=51821 \
+  -e HOST=0.0.0.0 \
+  -e INSECURE=false \
+  -e DISABLE_IPV6=false \
+  \
+  # Volumes
+  -v /opt/wg-easy:/etc/wireguard \
+  -v /lib/modules:/lib/modules:ro \
+  \
+  # Ports
+  -p 51820:51820/udp \
+  -p 51821:51821/tcp \
+  \
+  # Capabilities
+  --cap-add NET_ADMIN \
+  --cap-add SYS_MODULE \
+  \
+  # Kernel parameters
+  --sysctl net.ipv4.ip_forward=1 \
+  --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+  --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+  --sysctl net.ipv6.conf.all.forwarding=1 \
+  --sysctl net.ipv6.conf.default.forwarding=1 \
+  \
+  # Restart policy
+  --restart unless-stopped \
+  \
+  ghcr.io/wg-easy/wg-easy:15
+```
+
+## Configuration Options
+
+### Environment Variables
+
+<CodeGroup>
+
+```bash Basic Configuration
+-e PORT=51821              # Web UI port (default: 51821)
+-e HOST=0.0.0.0            # Web UI bind address (default: 0.0.0.0)
+-e INSECURE=true           # Allow HTTP access (default: false)
+-e DISABLE_IPV6=false      # Disable IPv6 support (default: false)
+```
+
+```bash Unattended Setup
+-e INIT_ENABLED=true \
+-e INIT_USERNAME=admin \
+-e INIT_PASSWORD=SecureP@ssw0rd \
+-e INIT_HOST=vpn.example.com \
+-e INIT_PORT=51820 \
+-e INIT_DNS=1.1.1.1,8.8.8.8 \
+-e INIT_IPV4_CIDR=10.8.0.0/24 \
+-e INIT_IPV6_CIDR=2001:0DB8::/32 \
+-e INIT_ALLOWED_IPS=10.8.0.0/24,2001:0DB8::/32
+```
+
+</CodeGroup>
+
+### Network Modes
+
+<CodeGroup>
+
+```bash Bridge Network (Recommended)
+# Create network first
+docker network create \
+  -d bridge --ipv6 \
+  --subnet 10.42.42.0/24 \
+  --subnet fdcc:ad94:bacf:61a3::/64 \
+  wg
+
+# Use network in container
+docker run -d \
+  --net wg \
+  --ip6 fdcc:ad94:bacf:61a3::2a \
+  --ip 10.42.42.42 \
+  ...
+```
+
+```bash Host Network
+# Simpler but less isolated
+docker run -d \
+  --network host \
+  # No port mappings needed
+  ...
+```
+
+</CodeGroup>
+
+<Warning>
+  Host network mode provides less isolation. Use bridge mode unless you have specific requirements.
+</Warning>
+
+### Volume Options
+
+<CodeGroup>
+
+```bash Bind Mount (User Directory)
+-v ~/.wg-easy:/etc/wireguard \
+-v /lib/modules:/lib/modules:ro
+```
+
+```bash Bind Mount (System Directory)
+-v /opt/wg-easy:/etc/wireguard \
+-v /lib/modules:/lib/modules:ro
+```
+
+```bash Named Volume
+# Create volume first
+docker volume create wg-easy-data
+
+# Use in container
+-v wg-easy-data:/etc/wireguard \
+-v /lib/modules:/lib/modules:ro
+```
+
+</CodeGroup>
+
+### Capability Requirements
+
+WireGuard Easy requires specific Linux capabilities to function:
+
+```bash
+--cap-add NET_ADMIN    # Required: Network administration
+--cap-add SYS_MODULE   # Required: Load kernel modules
+--cap-add NET_RAW      # Required for Podman only
+```
+
+<Warning>
+  Never use `--privileged` unless absolutely necessary. The specific capabilities above are sufficient and more secure.
+</Warning>
+
+## Advanced Configurations
+
+### With Reverse Proxy
+
+When using a reverse proxy, connect to its network:
+
+```bash
+docker run -d \
+  --net traefik \
+  --name wg-easy \
+  -e INSECURE=false \
+  -v /opt/wg-easy:/etc/wireguard \
+  -v /lib/modules:/lib/modules:ro \
+  -p 51820:51820/udp \
+  --cap-add NET_ADMIN \
+  --cap-add SYS_MODULE \
+  --sysctl net.ipv4.ip_forward=1 \
+  --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+  --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+  --sysctl net.ipv6.conf.all.forwarding=1 \
+  --sysctl net.ipv6.conf.default.forwarding=1 \
+  --restart unless-stopped \
+  --label "traefik.enable=true" \
+  --label "traefik.http.routers.wg-easy.rule=Host(\`vpn.example.com\`)" \
+  --label "traefik.http.routers.wg-easy.entrypoints=websecure" \
+  --label "traefik.http.services.wg-easy.loadbalancer.server.port=51821" \
+  ghcr.io/wg-easy/wg-easy:15
+```
+
+### Multiple Networks
+
+Connect to multiple Docker networks:
+
+```bash
+# Create container with first network
+docker run -d \
+  --net wg \
+  --name wg-easy \
+  ...
+
+# Connect to additional network
+docker network connect traefik wg-easy
+```
+
+### Custom DNS Configuration
+
+Use custom DNS servers for the container:
+
+```bash
+docker run -d \
+  --dns 1.1.1.1 \
+  --dns 8.8.8.8 \
+  ...
+```
+
+## Management Commands
+
+### View Logs
+
+```bash
+docker logs -f wg-easy
+```
+
+### Restart Container
+
+```bash
+docker restart wg-easy
+```
+
+### Stop Container
+
+```bash
+docker stop wg-easy
+```
+
+### Remove Container
+
+```bash
+docker stop wg-easy
+docker rm wg-easy
+```
+
+### Update to Latest Version
+
+```bash
+# Pull latest image
+docker pull ghcr.io/wg-easy/wg-easy:15
+
+# Stop and remove old container
+docker stop wg-easy
+docker rm wg-easy
+
+# Start new container with same configuration
+docker run -d \
+  --net wg \
+  --name wg-easy \
+  # ... rest of your configuration
+```
+
+### Backup Configuration
+
+```bash
+# Using bind mount
+tar -czf wg-easy-backup.tar.gz -C ~/.wg-easy .
+
+# Using named volume
+docker run --rm \
+  -v wg-easy-data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/wg-easy-backup.tar.gz -C /data .
+```
+
+### Restore Configuration
+
+```bash
+# Using bind mount
+tar -xzf wg-easy-backup.tar.gz -C ~/.wg-easy
+
+# Using named volume
+docker run --rm \
+  -v wg-easy-data:/data \
+  -v $(pwd):/backup \
+  alpine tar xzf /backup/wg-easy-backup.tar.gz -C /data
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Network not found error">
+    If you see "network wg not found", create the network first:
+
+    ```bash
+    docker network create \
+      -d bridge --ipv6 \
+      --subnet 10.42.42.0/24 \
+      --subnet fdcc:ad94:bacf:61a3::/64 \
+      wg
+    ```
+  </Accordion>
+
+  <Accordion title="Cannot bind to port">
+    Check if another service is using the port:
+
+    ```bash
+    sudo netstat -tulpn | grep 51820
+    sudo netstat -tulpn | grep 51821
+    ```
+
+    Stop conflicting services or use different ports:
+
+    ```bash
+    -p 51822:51821/tcp  # Use port 51822 instead
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied on /etc/wireguard">
+    Ensure the volume directory has correct permissions:
+
+    ```bash
+    sudo chown -R root:root ~/.wg-easy
+    sudo chmod 700 ~/.wg-easy
+    ```
+  </Accordion>
+
+  <Accordion title="WireGuard module not found">
+    Load the kernel module manually:
+
+    ```bash
+    sudo modprobe wireguard
+    lsmod | grep wireguard
+    ```
+
+    Make it persistent:
+
+    ```bash
+    echo "wireguard" | sudo tee /etc/modules-load.d/wireguard.conf
+    ```
+  </Accordion>
+
+  <Accordion title="Container stops immediately">
+    Check container logs for errors:
+
+    ```bash
+    docker logs wg-easy
+    ```
+
+    Verify required capabilities are granted:
+
+    ```bash
+    docker inspect wg-easy | grep -A 5 CapAdd
+    ```
+  </Accordion>
+
+  <Accordion title="IPv6 address already in use">
+    Either remove the conflicting container or use a different IPv6 address:
+
+    ```bash
+    --ip6 fdcc:ad94:bacf:61a3::2b  # Different address
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Migration to Docker Compose
+
+If you want to migrate from `docker run` to Docker Compose:
+
+<Steps>
+  <Step title="Export current configuration">
+    ```bash
+    docker inspect wg-easy > wg-easy-config.json
+    ```
+  </Step>
+
+  <Step title="Stop current container">
+    ```bash
+    docker stop wg-easy
+    docker rm wg-easy
+    ```
+  </Step>
+
+  <Step title="Create docker-compose.yml">
+    See the [Docker Compose deployment guide](/deployment/docker-compose) for the complete configuration.
+  </Step>
+
+  <Step title="Start with Docker Compose">
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Your WireGuard configuration in `/etc/wireguard` (or your chosen volume path) will be preserved during the migration.
+</Note>
