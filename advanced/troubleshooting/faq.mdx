@@ -149,7 +149,7 @@ This page answers frequently asked questions about WireGuard Easy. If your quest
   ```
   
   **Option 2: No reverse proxy with SSL**
-  Follow the [reverse-proxyless guide](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/reverse-proxyless/)
+  Follow the [reverse-proxyless guide](/deployment/reverse-proxyless)
   
   <Warning>
     For production, always use HTTPS, either through a reverse proxy or direct SSL configuration.
@@ -194,7 +194,7 @@ This page answers frequently asked questions about WireGuard Easy. If your quest
   2. **Configure routing on your router/firewall**
   3. **Update client AllowedIPs** to include home network
   
-  See [routed setup tutorial](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/routed/) for details.
+  See the hooks documentation for routed setup examples.
 </Accordion>
 
 <Accordion title="How do I backup my configuration?">
@@ -241,7 +241,7 @@ This page answers frequently asked questions about WireGuard Easy. If your quest
   sudo docker compose logs -f
   ```
   
-  **Auto-updates:** See [auto-updates tutorial](https://wg-easy.github.io/wg-easy/latest/examples/tutorials/auto-updates/)
+  **Auto-updates:** You can use Watchtower or similar tools to automatically update your WireGuard Easy container
   
   <Warning>
     When updating between major versions (e.g., v14 to v15), check the [migration guide](/advanced/migrate) first.
@@ -294,7 +294,7 @@ This page answers frequently asked questions about WireGuard Easy. If your quest
   sudo docker compose up -d
   ```
   
-  See [Common Issues](/advanced/troubleshooting/common-issues#error-cannot-find-device-wg0) for details.
+  See [Common Issues](/advanced/troubleshooting/common-issues) for details.
 </Accordion>
 
 <Accordion title="Error: iptables table 'nat' does not exist">
@@ -343,7 +343,7 @@ This page answers frequently asked questions about WireGuard Easy. If your quest
      - For full tunnel: `0.0.0.0/0, ::/0`
      - Check client configuration
   
-  See [Network Troubleshooting](/advanced/troubleshooting/networking#client-connects-but-no-internet) for detailed diagnostics.
+  See [Network Troubleshooting](/advanced/troubleshooting/networking) for detailed diagnostics.
 </Accordion>
 
 <Accordion title="Web UI is not accessible">
