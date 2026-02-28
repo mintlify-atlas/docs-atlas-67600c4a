@@ -1,0 +1,162 @@
+{
+  "projectType": "saas",
+  "projectName": "WireGuard Easy",
+  "projectDescription": "The easiest way to run WireGuard VPN with a web-based admin UI for managing clients and configurations.",
+  "theme": "aspen",
+  "primaryColor": "#ef4444",
+  "lightColor": "#fca5a5",
+  "darkColor": "#dc2626",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "getting-started",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/client-management",
+              "features/web-ui",
+              "features/qr-codes",
+              "features/statistics",
+              "features/one-time-links",
+              "features/2fa"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/amneziawg",
+              "configuration/unattended-setup",
+              "configuration/experimental"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "cli/overview",
+              "cli/admin-reset"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "groups": [
+          {
+            "group": "Docker",
+            "pages": [
+              "deployment/docker-compose",
+              "deployment/docker-run",
+              "deployment/podman"
+            ]
+          },
+          {
+            "group": "Reverse Proxy",
+            "pages": [
+              "deployment/caddy",
+              "deployment/traefik",
+              "deployment/nginx",
+              "deployment/reverse-proxyless"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "deployment/adguard",
+              "deployment/pihole"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Advanced",
+        "groups": [
+          {
+            "group": "Administration",
+            "pages": [
+              "advanced/api",
+              "advanced/metrics",
+              "advanced/hooks",
+              "advanced/security"
+            ]
+          },
+          {
+            "group": "Migration",
+            "pages": [
+              "advanced/migration/from-v14",
+              "advanced/migration/from-legacy"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "advanced/troubleshooting/common-issues",
+              "advanced/troubleshooting/networking",
+              "advanced/troubleshooting/faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/overview",
+              "contributing/development",
+              "contributing/translation",
+              "contributing/documentation"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "All-in-one WireGuard VPN with Web UI",
+    "Client management with QR codes and configuration files",
+    "Real-time statistics and Tx/Rx charts",
+    "Two-factor authentication (2FA)",
+    "One-time links and client expiration",
+    "Multilanguage support (20+ languages)",
+    "Prometheus metrics support",
+    "IPv6 and CIDR support",
+    "AmneziaWG integration",
+    "Gravatar support",
+    "Automatic light/dark mode"
+  ],
+  "publicApiSurface": [
+    "POST /api/session - Authentication",
+    "GET /api/session - Get session info",
+    "DELETE /api/session - Logout",
+    "GET /api/admin/interface - Get interface config",
+    "POST /api/admin/interface - Update interface config",
+    "GET /api/admin/general - Get general settings",
+    "POST /api/admin/general - Update general settings",
+    "GET /api/admin/hooks - Get hooks",
+    "POST /api/admin/hooks - Update hooks",
+    "GET /api/admin/userconfig - Get user config",
+    "POST /api/admin/userconfig - Update user config",
+    "GET /api/client - List clients",
+    "POST /api/client - Create client",
+    "GET /api/client/:id - Get client",
+    "PUT /api/client/:id - Update client",
+    "DELETE /api/client/:id - Delete client",
+    "GET /api/information - Get system information",
+    "GET /api/me - Get current user",
+    "POST /api/setup - Initial setup",
+    "cli db:admin:reset - Reset admin password",
+    "cli db:user:show - Show users",
+    "cli db:user:remove - Remove user"
+  ]
+}
